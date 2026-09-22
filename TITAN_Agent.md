@@ -7752,3 +7752,260 @@ Retry / Repair
 ---
 
 # END OF TOOL-CALL LOOP + CONTEXT ENGINE CHECKPOINT
+
+---
+
+# 211. TITAN MEMORY + EVALUATION FOUNDATION CHECKPOINT — 2026-09-22
+
+## Status
+
+The first persistent memory, evidence, evaluation, and repair-planning layer is now implemented.
+
+Implemented:
+
+~~~text
+[X] Memory item persistence
+[X] Project/task-scoped memory
+[X] Memory importance
+[X] Memory expiry
+[X] Source metadata
+[X] Basic lexical memory retrieval
+[X] Evidence ledger persistence
+[X] Evidence confidence
+[X] Evidence source URI/reference
+[X] Evaluation persistence
+[X] Evaluation criteria/findings
+[X] Evaluation score and pass/fail state
+[X] Repair attempt persistence
+[X] Repair diagnosis
+[X] Corrective-action planning
+[X] Execution summaries persisted as memory
+[X] Tool evidence persisted as memory
+[X] Agent execution evaluations persisted
+[X] PostgreSQL migration
+[X] Persistence tests
+~~~
+
+## Knowledge flow
+
+~~~text
+Agent Execution
+      ↓
+Summary / Tool Evidence
+      ↓
+Working Memory
+      ↓
+Evaluation
+      ↓
+Evaluation Record
+      ↓
+Failure
+      ↓
+Repair Attempt Plan
+~~~
+
+The initial memory search is deliberately deterministic and dependency-light.
+
+Current retrieval score combines:
+
+~~~text
+lexical relevance
++
+memory importance
+~~~
+
+The search layer is abstracted so semantic embeddings / pgvector retrieval can be added without changing the agent-facing memory contract.
+
+## Memory model
+
+Memory items support:
+
+~~~text
+project scope
+task scope
+kind
+content
+importance
+source type
+source id
+metadata
+creation time
+expiration time
+~~~
+
+This allows TITAN to distinguish:
+
+~~~text
+working knowledge
+decisions
+execution summaries
+tool evidence
+temporary context
+future organizational knowledge
+~~~
+
+Expired memory is excluded from retrieval.
+
+## Evidence ledger
+
+Evidence is stored separately from general memory.
+
+Evidence supports:
+
+~~~text
+type
+title
+content
+source URI
+source reference
+confidence
+checksum
+metadata
+~~~
+
+This preserves the distinction between:
+
+~~~text
+knowledge remembered by TITAN
+      vs
+evidence supporting a claim
+~~~
+
+## Evaluation model
+
+Evaluation records contain:
+
+~~~text
+evaluator type
+status
+score
+criteria
+findings
+timestamps
+project/task/run association
+~~~
+
+The initial EvaluationEngine evaluates explicit checks and calculates:
+
+~~~text
+score = passed checks / total checks
+~~~
+
+This deterministic layer becomes the foundation for later:
+
+~~~text
+LLM judges
+test runners
+security evaluators
+red-team evaluators
+human reviewers
+multi-evaluator consensus
+~~~
+
+## Repair model
+
+A failed evaluation can now produce a durable repair plan:
+
+~~~text
+Evaluation
+   ↓
+RepairAttempt
+   ├── diagnosis
+   ├── corrective action
+   ├── attempt number
+   └── status
+~~~
+
+Execution retry is not yet automatic.
+
+That remains intentionally separate from evaluation persistence so repair policy can decide:
+
+~~~text
+retry
+repair
+escalate
+request human approval
+terminate
+~~~
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] semantic embeddings
+[ ] pgvector retrieval
+[ ] memory relevance ranking beyond lexical scoring
+[ ] automatic memory compaction
+[ ] memory consolidation
+[ ] memory conflict detection
+[ ] source credibility scoring
+[ ] evaluator model routing
+[ ] independent evaluator workers
+[ ] automatic diagnosis generation
+[ ] automatic repair execution
+[ ] retry-after-repair orchestration
+[ ] human evaluation interface
+~~~
+
+## New architectural decisions
+
+~~~text
+DEC-061
+Memory is persistent project state, not only in-process agent context.
+
+DEC-062
+Evidence is persisted separately from generic memory so provenance can
+be evaluated independently.
+
+DEC-063
+Evaluation results are durable objects associated with project, task and
+optionally workflow run state.
+
+DEC-064
+Repair attempts are durable plans rather than implicit retry counters.
+
+DEC-065
+Initial memory retrieval is deterministic lexical retrieval; semantic
+retrieval remains behind a future provider abstraction.
+
+DEC-066
+Successful task execution persists both execution memory and evaluation
+before the task completion transaction commits.
+~~~
+
+## Current self-correction boundary
+
+TITAN can now represent:
+
+~~~text
+EXECUTE
+  ↓
+EVALUATE
+  ↓
+FAIL
+  ↓
+DIAGNOSE
+  ↓
+PLAN REPAIR
+~~~
+
+The next layer must close the loop:
+
+~~~text
+EXECUTE
+  ↓
+EVALUATE
+  ↓
+DIAGNOSE
+  ↓
+REPAIR
+  ↓
+RE-EVALUATE
+  ↓
+PASS / ESCALATE
+~~~
+
+---
+
+# END OF MEMORY + EVALUATION FOUNDATION CHECKPOINT
