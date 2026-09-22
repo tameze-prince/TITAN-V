@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio.client import Client
 
 from titan import __version__
+from titan.config import settings
 from titan.integrations.temporal.client import get_temporal_client
 from titan.persistence.database import close_database, get_session
 from titan.persistence.models import EventModel, ProjectModel, TaskModel, WorkflowModel
@@ -174,15 +175,16 @@ async def create_and_start_workflow(
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
+    requested_task_ids = set(payload.task_ids)
     tasks = list(
         await session.scalars(
             select(TaskModel).where(
                 TaskModel.project_id == project_id,
-                TaskModel.id.in_(payload.task_ids),
+                TaskModel.id.in_(requested_task_ids),
             )
         )
     )
-    if len(tasks) != len(set(payload.task_ids)):
+    if len(tasks) != len(requested_task_ids):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Every task must exist and belong to the project",
@@ -205,6 +207,9 @@ async def create_and_start_workflow(
             )
         task.workflow_id = workflow.id
 
+    temporal_workflow_id = f"titan-workflow-{workflow.id}"
+    workflow.temporal_workflow_id = temporal_workflow_id
+
     session.add(
         EventModel(
             project_id=project_id,
@@ -217,7 +222,6 @@ async def create_and_start_workflow(
     )
     await session.commit()
 
-    temporal_workflow_id = f"titan-workflow-{workflow.id}"
     request = WorkflowInput(
         workflow_id=str(workflow.id),
         project_id=str(project_id),
@@ -229,8 +233,11 @@ async def create_and_start_workflow(
             TitanWorkflow.run,
             request,
             id=temporal_workflow_id,
+            task_queue=settings.temporal_task_queue,
         )
     except Exception as exc:
+        for task in tasks:
+            task.workflow_id = None
         workflow.status = "FAILED"
         session.add(
             EventModel(
@@ -248,8 +255,6 @@ async def create_and_start_workflow(
             detail="Unable to start workflow execution",
         ) from exc
 
-    workflow.temporal_workflow_id = temporal_workflow_id
-    workflow.status = "RUNNING"
     session.add(
         EventModel(
             project_id=project_id,
