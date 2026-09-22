@@ -3,21 +3,21 @@ from abc import ABC, abstractmethod
 from time import perf_counter
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ModelRequest(BaseModel):
     system_prompt: str
     user_prompt: str
     model: str
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelResponse(BaseModel):
     provider: str
     model: str
     parsed: BaseModel
-    usage: dict[str, Any] = {}
+    usage: dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelProvider(ABC):
