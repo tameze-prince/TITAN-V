@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio.client import Client
@@ -11,10 +11,20 @@ from titan import __version__
 from titan.config import settings
 from titan.integrations.temporal.client import get_temporal_client
 from titan.persistence.database import close_database, get_session
-from titan.persistence.models import EventModel, IntentRecordModel, ProjectModel, TaskModel, WorkflowModel
+from titan.persistence.models import (
+    EventModel,
+    IntentRecordModel,
+    ProjectModel,
+    ProjectStateModel,
+    TaskGraphModel,
+    TaskModel,
+    WorkflowModel,
+)
 from titan.runtime.intent import IntentCompiler, IntentRepresentation
 from titan.runtime.memory import MemoryStore
 from titan.runtime.model_router import ModelBudget, ModelSelectionRequest
+from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
+from titan.runtime.planning_service import persist_task_graph
 from titan.runtime.service import get_agent_runtime
 from titan.workflows.contracts import WorkflowInput
 from titan.workflows.runtime import TitanWorkflow
@@ -46,10 +56,14 @@ class TaskResponse(BaseModel):
     id: UUID
     project_id: UUID
     workflow_id: UUID | None
+    task_graph_id: UUID | None
+    task_key: str | None
     title: str
     objective: str
     status: str
     risk_level: str
+    position: int
+    required_capabilities: list[str]
 
     model_config = {"from_attributes": True}
 
@@ -57,7 +71,14 @@ class TaskResponse(BaseModel):
 class WorkflowCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     workflow_type: str = Field(default="GENERIC", min_length=1, max_length=64)
-    task_ids: list[UUID] = Field(min_length=1, max_length=100)
+    task_ids: list[UUID] = Field(default_factory=list, max_length=100)
+    task_graph_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_task_source(self):
+        if bool(self.task_ids) == (self.task_graph_id is not None):
+            raise ValueError("Provide exactly one of task_ids or task_graph_id")
+        return self
 
 
 class WorkflowResponse(BaseModel):
@@ -92,6 +113,45 @@ class IntentCompileResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PlanCreate(BaseModel):
+    intent_record_id: UUID | None = None
+
+
+class PlannedTaskResponse(BaseModel):
+    id: UUID
+    task_key: str
+    title: str
+    objective: str
+    position: int
+    dependencies: list[str]
+    required_capabilities: list[str]
+    agent_name: str
+    risk_level: str
+    status: str
+
+
+class TaskGraphResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    intent_record_id: UUID
+    name: str
+    version: int
+    status: str
+    objective: str
+    tasks: list[PlannedTaskResponse]
+    unknowns: list[str]
+    constraints: list[str]
+    risks: list[str]
+
+
+class ProjectStateResponse(BaseModel):
+    project_id: UUID
+    status: str
+    phase: str
+    version: int
+    state: dict
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     yield
@@ -120,6 +180,19 @@ async def create_project(
     await session.flush()
 
     session.add(
+        ProjectStateModel(
+            project_id=project.id,
+            status="ACTIVE",
+            phase="DISCOVERY",
+            version=1,
+            state_json={
+                "objective": project.objective,
+                "task_graph_id": None,
+                "intent_record_id": None,
+            },
+        )
+    )
+    session.add(
         EventModel(
             project_id=project.id,
             type="ProjectCreated",
@@ -127,6 +200,16 @@ async def create_project(
             aggregate_type="PROJECT",
             aggregate_id=project.id,
             payload={"name": project.name},
+        )
+    )
+    session.add(
+        EventModel(
+            project_id=project.id,
+            type="ProjectStateInitialized",
+            actor_type="SYSTEM",
+            aggregate_type="PROJECT_STATE",
+            aggregate_id=project.id,
+            payload={"phase": "DISCOVERY", "status": "ACTIVE", "version": 1},
         )
     )
 
@@ -254,6 +337,141 @@ async def compile_project_intent(
     return record
 
 @app.post(
+    "/api/v1/projects/{project_id}/plan",
+    status_code=status.HTTP_201_CREATED,
+    response_model=TaskGraphResponse,
+)
+async def create_task_graph_plan(
+    project_id: UUID,
+    payload: PlanCreate,
+    session: AsyncSession = Depends(get_session),
+) -> TaskGraphResponse:
+    project = await session.scalar(
+        select(ProjectModel)
+        .where(ProjectModel.id == project_id)
+        .with_for_update()
+    )
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    if payload.intent_record_id is not None:
+        intent_record = await session.scalar(
+            select(IntentRecordModel).where(
+                IntentRecordModel.id == payload.intent_record_id,
+                IntentRecordModel.project_id == project_id,
+            )
+        )
+    else:
+        intent_record = await session.scalar(
+            select(IntentRecordModel)
+            .where(IntentRecordModel.project_id == project_id)
+            .order_by(IntentRecordModel.created_at.desc())
+            .limit(1)
+        )
+
+    if intent_record is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A compiled project intent is required before planning",
+        )
+
+    latest_version = await session.scalar(
+        select(TaskGraphModel.version)
+        .where(TaskGraphModel.project_id == project_id)
+        .order_by(TaskGraphModel.version.desc())
+        .limit(1)
+    )
+    version = (latest_version or 0) + 1
+
+    runtime = get_agent_runtime()
+    intent = IntentRepresentation.model_validate(intent_record.compiled)
+    planner = TaskGraphPlanner(runtime.capabilities, runtime.contracts.all())
+    try:
+        plan = planner.plan(intent, version=version)
+    except CapabilityResolutionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "The compiled intent requires capabilities that are not registered",
+                "missing_capabilities": list(exc.missing),
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    graph, tasks = await persist_task_graph(
+        session,
+        project=project,
+        intent_record=intent_record,
+        intent=intent,
+        plan=plan,
+        contracts=runtime.contracts.all(),
+    )
+    await session.commit()
+
+    node_by_key = {node.key: node for node in plan.nodes}
+    response_tasks = []
+    for task in sorted(tasks, key=lambda item: item.position):
+        node = node_by_key[task.task_key or ""]
+        response_tasks.append(
+            PlannedTaskResponse(
+                id=task.id,
+                task_key=task.task_key or "",
+                title=task.title,
+                objective=task.objective,
+                position=task.position,
+                dependencies=list(node.dependencies),
+                required_capabilities=task.required_capabilities,
+                agent_name=node.agent_name,
+                risk_level=task.risk_level,
+                status=task.status,
+            )
+        )
+
+    return TaskGraphResponse(
+        id=graph.id,
+        project_id=graph.project_id,
+        intent_record_id=graph.intent_record_id,
+        name=graph.name,
+        version=graph.version,
+        status=graph.status,
+        objective=graph.objective,
+        tasks=response_tasks,
+        unknowns=list(plan.unknowns),
+        constraints=list(plan.constraints),
+        risks=list(plan.risks),
+    )
+
+
+@app.get(
+    "/api/v1/projects/{project_id}/state",
+    response_model=ProjectStateResponse,
+)
+async def get_project_state(
+    project_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> ProjectStateResponse:
+    state = await session.scalar(
+        select(ProjectStateModel).where(ProjectStateModel.project_id == project_id)
+    )
+    if state is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project state not found",
+        )
+    return ProjectStateResponse(
+        project_id=state.project_id,
+        status=state.status,
+        phase=state.phase,
+        version=state.version,
+        state=state.state_json,
+    )
+
+
+@app.post(
     "/api/v1/projects/{project_id}/tasks",
     status_code=status.HTTP_201_CREATED,
     response_model=TaskResponse,
@@ -306,23 +524,63 @@ async def create_and_start_workflow(
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    requested_task_ids = set(payload.task_ids)
-    tasks = list(
-        await session.scalars(
-            select(TaskModel).where(
-                TaskModel.project_id == project_id,
-                TaskModel.id.in_(requested_task_ids),
+    task_graph = None
+    if payload.task_graph_id is not None:
+        task_graph = await session.scalar(
+            select(TaskGraphModel).where(
+                TaskGraphModel.id == payload.task_graph_id,
+                TaskGraphModel.project_id == project_id,
             )
         )
-    )
-    if len(tasks) != len(requested_task_ids):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Every task must exist and belong to the project",
+        if task_graph is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task graph not found",
+            )
+        if task_graph.status not in {"READY", "PLANNED"}:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Task graph is not executable in status {task_graph.status}",
+            )
+        tasks = list(
+            await session.scalars(
+                select(TaskModel)
+                .where(
+                    TaskModel.project_id == project_id,
+                    TaskModel.task_graph_id == task_graph.id,
+                )
+                .order_by(TaskModel.position.asc())
+            )
         )
+        if not tasks:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Task graph contains no tasks",
+            )
+        requested_task_ids = [task.id for task in tasks]
+    else:
+        requested_task_ids = list(dict.fromkeys(payload.task_ids))
+        task_rows = {
+            task.id: task
+            for task in (
+                await session.scalars(
+                    select(TaskModel).where(
+                        TaskModel.project_id == project_id,
+                        TaskModel.id.in_(requested_task_ids),
+                    )
+                )
+            )
+        }
+        if len(task_rows) != len(requested_task_ids):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Every task must exist and belong to the project",
+            )
+        tasks = [task_rows[task_id] for task_id in requested_task_ids]
 
     workflow = WorkflowModel(
         project_id=project_id,
+        task_graph_id=task_graph.id if task_graph is not None else None,
         name=payload.name,
         workflow_type=payload.workflow_type,
         status="STARTING",
@@ -340,6 +598,8 @@ async def create_and_start_workflow(
 
     temporal_workflow_id = f"titan-workflow-{workflow.id}"
     workflow.temporal_workflow_id = temporal_workflow_id
+    if task_graph is not None:
+        task_graph.status = "RUNNING"
 
     session.add(
         EventModel(
@@ -370,6 +630,8 @@ async def create_and_start_workflow(
         for task in tasks:
             task.workflow_id = None
         workflow.status = "FAILED"
+        if task_graph is not None:
+            task_graph.status = "READY"
         session.add(
             EventModel(
                 project_id=project_id,
