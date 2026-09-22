@@ -254,7 +254,7 @@ class AgentRuntime:
             provider=provider_name,
             model=model_name,
             status="COMPLETED",
-            output=response.parsed,
+            output=parsed,
             duration_ms=duration_ms,
             usage=usage,
             evaluation=evaluation.model_dump(),
