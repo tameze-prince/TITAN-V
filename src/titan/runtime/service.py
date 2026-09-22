@@ -204,8 +204,7 @@ class AgentRuntime:
             tool_definitions = self.tools.resolve_many(tool_names)
             if not hasattr(provider, "generate_tool_turn"):
                 raise TypeError(
-                    f"Provider '{response.provider if 'response' in locals() else type(provider).__name__}' "
-                    "does not support tool calling"
+                    f"Provider '{type(provider).__name__}' does not support tool calling"
                 )
 
             loop_result = await self.tool_loop.run(
