@@ -8,6 +8,8 @@ from temporalio import activity
 from titan.persistence.database import SessionFactory
 from titan.persistence.models import ArtifactModel, EventModel, RunModel, TaskModel, WorkflowModel
 from titan.runtime.contracts import AgentTaskContext
+from titan.runtime.evaluation_service import EvaluationCheck, EvaluationEngine
+from titan.runtime.memory import MemoryStore
 from titan.runtime.service import get_agent_runtime
 
 
@@ -95,6 +97,8 @@ async def orchestrate_task(
         await session.flush()
 
         runtime = get_agent_runtime()
+        memory_store = MemoryStore()
+        evaluation_engine = EvaluationEngine()
         context = AgentTaskContext(
             task_id=task_id,
             run_id=run_id,
@@ -107,6 +111,66 @@ async def orchestrate_task(
         try:
             execution = await runtime.execute(context)
             artifact_content = execution.model_dump_json()
+
+            evaluation_payload = execution.evaluation
+            checks_payload = evaluation_payload.get("checks", {})
+            evaluation_result = evaluation_engine.evaluate(
+                checks=tuple(
+                    EvaluationCheck(
+                        name=name,
+                        passed=bool(passed),
+                        evidence=evaluation_payload.get("message", ""),
+                    )
+                    for name, passed in checks_payload.items()
+                )
+                or (
+                    EvaluationCheck(
+                        name="baseline",
+                        passed=bool(evaluation_payload.get("passed", False)),
+                        evidence=evaluation_payload.get("message", ""),
+                    ),
+                )
+            )
+
+            await memory_store.remember(
+                session,
+                project_id=task.project_id,
+                task_id=task.id,
+                kind="EXECUTION_SUMMARY",
+                content=execution.output.summary,
+                importance=70,
+                source_type="TASK_RUN",
+                source_id=task.id,
+                metadata={
+                    "agent_name": execution.agent_name,
+                    "provider": execution.provider,
+                    "model": execution.model,
+                    "run_id": run_id,
+                },
+            )
+
+            tool_results = execution.output.result.get("tool_results", [])
+            if tool_results:
+                tool_memory = str(tool_results)[:12_000]
+                await memory_store.remember(
+                    session,
+                    project_id=task.project_id,
+                    task_id=task.id,
+                    kind="TOOL_EVIDENCE",
+                    content=tool_memory,
+                    importance=60,
+                    source_type="TASK_RUN",
+                    source_id=task.id,
+                    metadata={"run_id": run_id},
+                )
+
+            await evaluation_engine.persist(
+                session,
+                project_id=task.project_id,
+                task_id=task.id,
+                run_id=UUID(run_id),
+                result=evaluation_result,
+            )
 
             artifact = ArtifactModel(
                 project_id=task.project_id,
