@@ -84,7 +84,11 @@ class AgentToolLoop:
                 "name": tool.name,
                 "description": tool.description,
                 "strict": tool.strict,
-                "parameters": tool.input_schema,
+                "parameters": tool.input_schema or {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": True,
+                },
             }
             for tool in tools
         ]
@@ -158,7 +162,7 @@ class AgentToolLoop:
                             "output": json.dumps(result_payload, default=str),
                         }
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     error_payload = {
                         "error_type": type(exc).__name__,
                         "error_message": str(exc),
