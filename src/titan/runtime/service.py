@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from time import perf_counter
 
@@ -12,6 +13,7 @@ from titan.runtime.contracts import (
 from titan.runtime.evaluation import evaluate_execution
 from titan.runtime.tool_loop import AgentToolLoop
 from titan.runtime.policies import RuntimePolicy
+from titan.runtime.repair import AgentEvaluationFailure, RepairPlanner, RepairPolicy
 from titan.runtime.providers import ModelRequest, build_default_provider_router
 from titan.runtime.sandbox import DockerSandbox, SandboxPolicy
 from titan.runtime.tools import (
@@ -108,7 +110,8 @@ class AgentRuntime:
         self.tool_executor = ToolExecutor(self.tools, policy=self.policy)
         self.workspace_manager = WorkspaceManager(settings.workspace_root)
         self.tool_loop = AgentToolLoop()
-
+        self.repair_policy = RepairPolicy()
+        self.repair_planner = RepairPlanner()
 
     async def execute_tool(
         self,
@@ -176,89 +179,115 @@ class AgentRuntime:
             raise PermissionError(decision.reason)
 
         provider = self.providers.resolve(contract.model)
-        prompt = (
-            f"Task title: {context.title}\n"
-            f"Task objective: {context.objective}\n"
-            f"Risk level: {context.risk_level}\n"
-            f"Additional inputs: {context.inputs}\n"
-        )
-        request = ModelRequest(
-            system_prompt=contract.instructions,
-            user_prompt=prompt,
-            model=contract.model,
-            metadata={
-                "task_id": context.task_id,
-                "run_id": context.run_id,
-                "project_id": context.project_id,
-                "objective": context.objective,
-            },
-        )
-
         started = perf_counter()
+        repair_context = dict(context.inputs)
 
-        if tool_names:
-            workspace = self.workspace_manager.ensure(
-                context.project_id,
-                context.task_id,
-            ).root
-            tool_definitions = self.tools.resolve_many(tool_names)
-            if not hasattr(provider, "generate_tool_turn"):
-                raise TypeError(
-                    f"Provider '{type(provider).__name__}' does not support tool calling"
+        for attempt in range(1, self.repair_policy.max_attempts + 2):
+            execution_context = replace(context, inputs=repair_context)
+            prompt = (
+                f"Task title: {execution_context.title}\n"
+                f"Task objective: {execution_context.objective}\n"
+                f"Risk level: {execution_context.risk_level}\n"
+                f"Additional inputs: {execution_context.inputs}\n"
+            )
+            request = ModelRequest(
+                system_prompt=contract.instructions,
+                user_prompt=prompt,
+                model=contract.model,
+                metadata={
+                    "task_id": execution_context.task_id,
+                    "run_id": execution_context.run_id,
+                    "project_id": execution_context.project_id,
+                    "objective": execution_context.objective,
+                    "repair_attempt": attempt,
+                },
+            )
+
+            if tool_names:
+                workspace = self.workspace_manager.ensure(
+                    execution_context.project_id,
+                    execution_context.task_id,
+                ).root
+                tool_definitions = self.tools.resolve_many(tool_names)
+                if not hasattr(provider, "generate_tool_turn"):
+                    raise TypeError(
+                        f"Provider '{type(provider).__name__}' does not support tool calling"
+                    )
+
+                loop_result = await self.tool_loop.run(
+                    provider=provider,
+                    contract=contract,
+                    task=execution_context,
+                    workspace=workspace,
+                    tools=tool_definitions,
+                    executor=self.tool_executor,
+                )
+                parsed = AgentModelOutput(
+                    summary=loop_result.final_text or "Tool loop completed without final text.",
+                    result={
+                        "tool_calls": loop_result.tool_calls,
+                        "tool_results": loop_result.tool_results,
+                    },
+                    artifact_markdown=(
+                        "# Agent Tool Execution\n\n"
+                        f"## Summary\n{loop_result.final_text}\n\n"
+                        "## Tool trace\n"
+                        f"{loop_result.tool_results}"
+                    ),
+                )
+                provider_name = provider.name
+                model_name = contract.model
+                usage = {
+                    "tool_calls": len(loop_result.tool_calls),
+                    "repair_attempt": attempt,
+                }
+            else:
+                response = await provider.generate(request, AgentModelOutput)
+                parsed = response.parsed
+                provider_name = response.provider
+                model_name = response.model
+                usage = {
+                    **response.usage,
+                    "repair_attempt": attempt,
+                }
+
+            evaluation = evaluate_execution(
+                output=parsed,
+                artifact_markdown=parsed.artifact_markdown,
+            )
+
+            if evaluation.passed:
+                usage["repair_attempts_total"] = attempt - 1
+                duration_ms = int((perf_counter() - started) * 1000)
+                return AgentExecutionResult(
+                    task_id=context.task_id,
+                    agent_name=contract.name,
+                    agent_version=contract.version,
+                    provider=provider_name,
+                    model=model_name,
+                    status="COMPLETED",
+                    output=parsed,
+                    duration_ms=duration_ms,
+                    usage=usage,
+                    evaluation=evaluation.model_dump(),
                 )
 
-            loop_result = await self.tool_loop.run(
-                provider=provider,
-                contract=contract,
-                task=context,
-                workspace=workspace,
-                tools=tool_definitions,
-                executor=self.tool_executor,
+            plan = self.repair_planner.build(
+                evaluation=evaluation,
+                attempt=attempt,
+                prior_context=repair_context,
             )
-            parsed = AgentModelOutput(
-                summary=loop_result.final_text or "Tool loop completed without final text.",
-                result={
-                    "tool_calls": loop_result.tool_calls,
-                    "tool_results": loop_result.tool_results,
-                },
-                artifact_markdown=(
-                    "# Agent Tool Execution\n\n"
-                    f"## Summary\n{loop_result.final_text}\n\n"
-                    "## Tool trace\n"
-                    f"{loop_result.tool_results}"
-                ),
-            )
-            provider_name = provider.name
-            model_name = contract.model
-            usage = {"tool_calls": len(loop_result.tool_calls)}
-        else:
-            response = await provider.generate(request, AgentModelOutput)
-            parsed = response.parsed
-            provider_name = response.provider
-            model_name = response.model
-            usage = response.usage
+            if attempt > self.repair_policy.max_attempts:
+                raise AgentEvaluationFailure(evaluation=evaluation, plan=plan)
 
-        evaluation = evaluate_execution(
-            output=parsed,
-            artifact_markdown=parsed.artifact_markdown,
-        )
-        duration_ms = int((perf_counter() - started) * 1000)
+            repair_context = {
+                **repair_context,
+                "repair_diagnosis": plan.diagnosis,
+                "repair_context": plan.corrective_action,
+                "failed_checks": plan.failed_checks,
+            }
 
-        if not evaluation.passed:
-            raise ValueError(evaluation.message)
-
-        return AgentExecutionResult(
-            task_id=context.task_id,
-            agent_name=contract.name,
-            agent_version=contract.version,
-            provider=provider_name,
-            model=model_name,
-            status="COMPLETED",
-            output=parsed,
-            duration_ms=duration_ms,
-            usage=usage,
-            evaluation=evaluation.model_dump(),
-        )
+        raise RuntimeError("Repair loop exited without a terminal state")
 
 
 _runtime: AgentRuntime | None = None

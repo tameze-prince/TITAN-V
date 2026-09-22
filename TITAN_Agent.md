@@ -8009,3 +8009,200 @@ PASS / ESCALATE
 ---
 
 # END OF MEMORY + EVALUATION FOUNDATION CHECKPOINT
+
+---
+
+# 212. TITAN DURABLE REPAIR LOOP CHECKPOINT — 2026-09-22
+
+## Status
+
+TITAN now has the first durable self-correction loop spanning Agent Runtime evaluation and Temporal activity retries.
+
+Implemented:
+
+~~~text
+[X] Repair policy
+[X] Repair planner
+[X] Evaluation failure contract
+[X] Bounded agent-level repair attempts
+[X] Repair context injection into subsequent attempts
+[X] Durable repair attempt persistence
+[X] Evaluation persistence on failed quality gates
+[X] Repair diagnosis memory
+[X] Temporal retry-aware task status
+[X] TaskRepairPlanned event
+[X] Final TaskFailed event after retry budget exhaustion
+[X] Repair loop unit tests
+~~~
+
+## Self-correction path
+
+~~~text
+Agent Execution
+      ↓
+Evaluation
+      ↓
+PASS ─────────────→ Task Completed
+
+FAIL
+  ↓
+Diagnosis
+  ↓
+Corrective Action
+  ↓
+Repair Context
+  ↓
+Agent Re-execution
+  ↓
+Evaluation
+  ↓
+PASS / FAIL
+~~~
+
+The durable workflow boundary adds:
+
+~~~text
+Activity Attempt 1
+      ↓
+RepairAttempt persisted
+      ↓
+Temporal retry
+      ↓
+Repair context loaded from PostgreSQL
+      ↓
+Activity Attempt 2
+      ↓
+...
+      ↓
+Final failure
+      ↓
+WorkflowFailed
+~~~
+
+## Repair policy
+
+Agent-level repair is bounded.
+
+Current default:
+
+~~~text
+max repair attempts = 2
+~~~
+
+Temporal activity retry remains independently bounded.
+
+This creates two distinct controls:
+
+~~~text
+agent quality-repair budget
++
+workflow reliability retry budget
+~~~
+
+They must not be conflated.
+
+## Repair context
+
+A failed evaluation generates:
+
+~~~text
+diagnosis
+corrective action
+failed checks
+attempt number
+~~~
+
+The next activity attempt loads the latest persisted repair plan and injects it into the task context.
+
+This makes repair durable across process restarts and worker replacement.
+
+## Task state
+
+Task execution now distinguishes:
+
+~~~text
+RUNNING
+RETRYING
+REPAIRING
+COMPLETED
+FAILED
+~~~
+
+Transient execution failures become RETRYING.
+
+Quality-gate failures become REPAIRING while retries remain available.
+
+Only the final exhausted attempt becomes FAILED.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] semantic diagnosis model
+[ ] automatic corrective code generation
+[ ] repair task graph branching
+[ ] evaluator ensemble / consensus
+[ ] human approval during repair
+[ ] cross-run organizational learning
+[ ] repair success metrics
+[ ] automatic policy escalation based on repeated failures
+~~~
+
+## New architectural decisions
+
+~~~text
+DEC-067
+Evaluation failure is represented as a typed AgentEvaluationFailure so
+repair policy can distinguish quality failure from infrastructure failure.
+
+DEC-068
+Agent-level repair attempts are bounded independently from Temporal
+activity retries.
+
+DEC-069
+Repair context is persisted before Temporal retry and loaded from the
+control plane on the next attempt.
+
+DEC-070
+Quality-gate failures set tasks to REPAIRING while retry capacity
+remains; exhausted quality failures become FAILED.
+
+DEC-071
+Transient non-quality execution failures are represented as RETRYING
+until the workflow retry budget is exhausted.
+~~~
+
+## Next phase
+
+~~~text
+TITAN MODEL ROUTER + COST / TOKEN GOVERNANCE
+~~~
+
+The next foundation will make model execution economically and operationally governed:
+
+~~~text
+Task
+ ↓
+Model Selection
+ ↓
+Capability / Quality Requirement
+ ↓
+Budget
+ ↓
+Provider
+ ↓
+Execution
+ ↓
+Usage
+ ↓
+Cost
+ ↓
+Policy
+ ↓
+Memory / Evaluation
+~~~
+
+---
+
+# END OF DURABLE REPAIR LOOP CHECKPOINT
