@@ -9,7 +9,11 @@ from titan.runtime.planner import (
     TaskGraphPlanner,
     topological_order,
 )
-from titan.runtime.service import AgentContractRegistry
+from titan.runtime.service import (
+    AgentContractRegistry,
+    ENGINEERING_AGENT,
+    GENERAL_AGENT,
+)
 
 
 def test_capability_resolver_normalizes_and_deduplicates_names() -> None:
@@ -49,7 +53,9 @@ def test_capability_resolver_reports_unknown_capabilities() -> None:
 
 
 def test_task_graph_planner_builds_a_dag_with_assignments() -> None:
-    runtime_contracts = AgentContractRegistry().all()
+    runtime_contracts = AgentContractRegistry(
+        (GENERAL_AGENT, ENGINEERING_AGENT)
+    ).all()
     planner = TaskGraphPlanner(
         build_default_capability_registry(),
         runtime_contracts,
@@ -76,7 +82,9 @@ def test_task_graph_planner_builds_a_dag_with_assignments() -> None:
 
 
 def test_agent_contract_registry_exposes_deterministic_contracts() -> None:
-    registry = AgentContractRegistry()
+    registry = AgentContractRegistry(
+        (GENERAL_AGENT, ENGINEERING_AGENT)
+    )
     names = [contract.name for contract in registry.all()]
 
     assert names == sorted(names)
