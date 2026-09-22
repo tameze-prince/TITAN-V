@@ -64,3 +64,24 @@ def test_provider_router_rejects_unknown_provider() -> None:
 
     with pytest.raises(KeyError, match="not registered"):
         router.resolve("unknown:model")
+
+
+@pytest.mark.asyncio
+async def test_engineering_agent_uses_tool_loop_boundary() -> None:
+    from uuid import uuid4
+
+    runtime = AgentRuntime()
+    context = AgentTaskContext(
+        task_id=str(uuid4()),
+        run_id=str(uuid4()),
+        project_id=str(uuid4()),
+        title="Inspect workspace",
+        objective="Inspect the assigned engineering workspace and summarize the task.",
+        risk_level="R1",
+    )
+
+    result = await runtime.execute(context, agent_name="engineering-executor")
+
+    assert result.status == "COMPLETED"
+    assert result.evaluation["passed"] is True
+    assert "tool_calls" in result.output.result
