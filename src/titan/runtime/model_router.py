@@ -60,6 +60,25 @@ class ModelRouter:
             for route in self._routes
             if route.enabled and route.quality_tier >= request.minimum_quality_tier
         ]
+
+        if not any(route.model == request.preferred_model for route in candidates):
+            try:
+                provider_name = request.preferred_model.split(":", 1)[0]
+                self.provider_router.resolve(request.preferred_model)
+            except KeyError:
+                provider_name = ""
+            if provider_name:
+                return ModelSelection(
+                    route=ModelRoute(
+                        name=f"dynamic-{request.preferred_model}",
+                        provider=provider_name,
+                        model=request.preferred_model,
+                        quality_tier=request.minimum_quality_tier,
+                        priority=100,
+                    ),
+                    provider=self.provider_router.resolve(request.preferred_model),
+                )
+
         if not candidates:
             raise LookupError("No model route satisfies the requested quality tier")
 
