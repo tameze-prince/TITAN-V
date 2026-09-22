@@ -6558,3 +6558,170 @@ DEC-022  Credential Broker
 ---
 
 # END OF TITAN CORE ARCHITECTURE v0.1.0
+
+---
+
+# 203. CORE PERSISTENCE IMPLEMENTATION CHECKPOINT — 2026-09-22
+
+## Status
+
+The first persistent control-plane slice is now implemented in the repository.
+
+Implemented:
+
+```text
+[X] PostgreSQL control-plane integration
+[X] SQLAlchemy 2 ORM foundation
+[X] Async session factory
+[X] Alembic configuration
+[X] Initial database migration
+[X] Project persistence
+[X] Agent persistence model
+[X] Task persistence model
+[X] Task dependency table
+[X] Workflow persistence model
+[X] Artifact persistence model
+[X] Event persistence model
+[X] Initial ProjectCreated domain event
+[X] PostgreSQL-backed integration test
+[X] CI database service
+[X] CI migration step
+[X] Temporal database isolation in local Compose
+```
+
+Not yet implemented:
+
+```text
+[ ] Application/repository abstraction layer
+[ ] Full domain-to-persistence mapping layer
+[ ] Workflow persistence and Temporal adapter
+[ ] Agent registry persistence and capability tables
+[ ] Artifact content storage
+[ ] Event outbox dispatcher
+[ ] Authentication/authorization persistence
+[ ] Approval persistence
+[ ] Evaluation persistence
+```
+
+## Persistence principles established
+
+1. PostgreSQL is the authoritative control-plane database.
+2. SQLAlchemy models are infrastructure representations and are not the long-term domain API.
+3. Alembic owns schema evolution.
+4. Important project actions begin creating durable domain events.
+5. Integration tests use a real PostgreSQL service in CI.
+6. Temporal receives a dedicated local PostgreSQL instance rather than sharing the TITAN application database.
+
+## New architectural decisions
+
+```text
+DEC-023
+Use SQLAlchemy 2.x async ORM for the initial persistence adapter.
+
+DEC-024
+Use Alembic migrations as the only supported schema evolution mechanism.
+
+DEC-025
+Project creation persists a ProjectCreated event in the same database transaction.
+
+DEC-026
+The local Temporal development stack uses a separate PostgreSQL database service.
+
+DEC-027
+CI must execute database migrations before integration tests.
+```
+
+## First persisted lifecycle
+
+```text
+POST /api/v1/projects
+        ↓
+Validate request
+        ↓
+Create Project
+        ↓
+Flush database identity
+        ↓
+Create ProjectCreated event
+        ↓
+Commit one transaction
+        ↓
+Return persisted Project
+```
+
+This establishes the first concrete example of the TITAN rule:
+
+> State change + durable event must be committed together.
+
+## Next persistence step
+
+The next database expansion should implement:
+
+```text
+Agent
+  ↓
+Capability
+  ↓
+Task
+  ↓
+Workflow
+  ↓
+Run
+  ↓
+Approval
+  ↓
+Evaluation
+  ↓
+Audit
+```
+
+The schema must evolve incrementally through Alembic migrations rather than introducing the entire future schema at once.
+
+---
+
+# 204. REPOSITORY SOURCE-OF-TRUTH RULE
+
+`TITAN_Agent.md` in the Git repository is the project specification baseline.
+
+Any important implementation that changes the architecture must update this file in the same development cycle.
+
+Required order:
+
+```text
+Implementation
+    ↓
+Tests
+    ↓
+Evidence
+    ↓
+Specification update
+    ↓
+Pull Request
+```
+
+---
+
+# 205. CURRENT IMPLEMENTATION PHASE
+
+```text
+TITAN 0 — CORE KERNEL
+
+Phase:
+PERSISTENCE FOUNDATION
+
+Completed:
+Repository bootstrap
+Specification baseline
+CI foundation
+Persistence foundation
+
+Current:
+Core domain persistence + event foundation
+
+Next:
+Workflow runtime + Temporal integration
+```
+
+---
+
+# END OF PERSISTENCE IMPLEMENTATION CHECKPOINT
