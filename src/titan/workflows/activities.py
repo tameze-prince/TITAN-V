@@ -3,6 +3,7 @@ from hashlib import sha256
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from temporalio import activity
 
 from titan.persistence.database import SessionFactory
@@ -10,10 +11,13 @@ from titan.persistence.models import (
     ArtifactModel,
     EvaluationModel,
     EventModel,
+    ProjectStateModel,
     RepairAttemptModel,
     RunModel,
+    TaskGraphModel,
     TaskModel,
     WorkflowModel,
+    task_dependencies,
 )
 from titan.runtime.contracts import AgentTaskContext
 from titan.runtime.evaluation_service import EvaluationCheck, EvaluationEngine
@@ -49,6 +53,16 @@ async def mark_workflow_started(
             temporal_run_id=temporal_run_id,
         )
         workflow.status = "RUNNING"
+
+        state = await session.scalar(
+            select(ProjectStateModel).where(
+                ProjectStateModel.project_id == workflow.project_id
+            )
+        )
+        if state is not None:
+            state.status = "RUNNING"
+            state.phase = "EXECUTION"
+            state.version += 1
         workflow.temporal_workflow_id = temporal_workflow_id
         workflow.temporal_run_id = temporal_run_id
         workflow.started_at = datetime.now(UTC)
@@ -82,7 +96,11 @@ async def orchestrate_task(
     task_uuid = UUID(task_id)
 
     async with SessionFactory() as session:
-        task = await session.scalar(select(TaskModel).where(TaskModel.id == task_uuid))
+        task = await session.scalar(
+            select(TaskModel)
+            .options(selectinload(TaskModel.owner_agent))
+            .where(TaskModel.id == task_uuid)
+        )
         if task is None:
             raise ValueError(f"Task {task_id} not found")
 
@@ -92,7 +110,52 @@ async def orchestrate_task(
         if task.status == "COMPLETED":
             return True
 
+        dependency_ids = list(
+            (
+                await session.execute(
+                    select(task_dependencies.c.depends_on_task_id).where(
+                        task_dependencies.c.task_id == task.id
+                    )
+                )
+            ).scalars()
+        )
+        if dependency_ids:
+            incomplete_dependency = await session.scalar(
+                select(TaskModel)
+                .where(
+                    TaskModel.id.in_(dependency_ids),
+                    TaskModel.status != "COMPLETED",
+                )
+                .limit(1)
+            )
+            if incomplete_dependency is not None:
+                task.status = "BLOCKED"
+                session.add(
+                    EventModel(
+                        project_id=task.project_id,
+                        type="TaskBlocked",
+                        actor_type="SYSTEM",
+                        aggregate_type="TASK",
+                        aggregate_id=task.id,
+                        payload={
+                            "run_id": run_id,
+                            "dependency_task_id": str(incomplete_dependency.id),
+                            "dependency_status": incomplete_dependency.status,
+                        },
+                    )
+                )
+                await session.commit()
+                raise RuntimeError(
+                    f"Task {task.id} has an incomplete dependency "
+                    f"{incomplete_dependency.id}"
+                )
+
         task.status = "RUNNING"
+        agent_name = (
+            task.owner_agent.name
+            if task.owner_agent is not None
+            else "general-executor"
+        )
         session.add(
             EventModel(
                 project_id=task.project_id,
@@ -100,7 +163,11 @@ async def orchestrate_task(
                 actor_type="SYSTEM",
                 aggregate_type="TASK",
                 aggregate_id=task.id,
-                payload={"run_id": run_id, "execution_mode": "agent-runtime"},
+                payload={
+                    "run_id": run_id,
+                    "execution_mode": "agent-runtime",
+                    "agent_name": agent_name,
+                },
             )
         )
         await session.flush()
@@ -136,7 +203,7 @@ async def orchestrate_task(
         )
 
         try:
-            execution = await runtime.execute(context)
+            execution = await runtime.execute(context, agent_name=agent_name)
             artifact_content = execution.model_dump_json()
 
             evaluation_payload = execution.evaluation
@@ -371,6 +438,25 @@ async def mark_workflow_completed(
         run.completed_at = now
         run.metrics = {"completed_tasks": len(completed_task_ids)}
 
+        state = await session.scalar(
+            select(ProjectStateModel).where(
+                ProjectStateModel.project_id == workflow.project_id
+            )
+        )
+        if state is not None:
+            state.status = "COMPLETED"
+            state.phase = "COMPLETED"
+            state.version += 1
+
+        if workflow.task_graph_id is not None:
+            task_graph = await session.scalar(
+                select(TaskGraphModel).where(
+                    TaskGraphModel.id == workflow.task_graph_id
+                )
+            )
+            if task_graph is not None:
+                task_graph.status = "COMPLETED"
+
         session.add(
             EventModel(
                 project_id=workflow.project_id,
@@ -408,6 +494,25 @@ async def mark_workflow_failed(
         run.completed_at = now
         run.error_code = "WORKFLOW_FAILED"
         run.error_message = error_message
+
+        state = await session.scalar(
+            select(ProjectStateModel).where(
+                ProjectStateModel.project_id == workflow.project_id
+            )
+        )
+        if state is not None:
+            state.status = "FAILED"
+            state.phase = "EXECUTION_FAILED"
+            state.version += 1
+
+        if workflow.task_graph_id is not None:
+            task_graph = await session.scalar(
+                select(TaskGraphModel).where(
+                    TaskGraphModel.id == workflow.task_graph_id
+                )
+            )
+            if task_graph is not None:
+                task_graph.status = "FAILED"
 
         session.add(
             EventModel(
