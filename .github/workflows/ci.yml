@@ -12,6 +12,10 @@ jobs:
     env:
       TITAN_DATABASE_URL: postgresql+asyncpg://titan:titan@localhost:5432/titan
       TITAN_RUN_INTEGRATION: "1"
+      TITAN_RUN_TEMPORAL_INTEGRATION: "1"
+      TITAN_TEMPORAL_TARGET: localhost:7233
+      TITAN_TEMPORAL_NAMESPACE: default
+      TITAN_TEMPORAL_TASK_QUEUE: titan-ci
 
     services:
       postgres:
@@ -28,6 +32,33 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
+      temporal-postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: temporal
+          POSTGRES_USER: titan
+          POSTGRES_PASSWORD: titan
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U titan -d temporal"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      temporal:
+        image: temporalio/auto-setup:latest
+        env:
+          DB: postgres12
+          DB_PORT: 5432
+          POSTGRES_USER: titan
+          POSTGRES_PWD: titan
+          POSTGRES_SEEDS: temporal-postgres
+          TEMPORAL_ADDRESS: temporal:7233
+          TEMPORAL_CLI_ADDRESS: temporal:7233
+        ports:
+          - 7233:7233
+
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +71,24 @@ jobs:
 
       - name: Database migrations
         run: alembic upgrade head
+
+      - name: Wait for Temporal
+        run: |
+          python - <<'PY'
+          import socket
+          import time
+
+          deadline = time.time() + 120
+          while time.time() < deadline:
+              try:
+                  with socket.create_connection(("127.0.0.1", 7233), timeout=2):
+                      print("Temporal is accepting TCP connections")
+                      raise SystemExit(0)
+              except OSError:
+                  time.sleep(2)
+
+          raise SystemExit("Temporal did not become ready within 120 seconds")
+          PY
 
       - name: Lint
         run: ruff check .
