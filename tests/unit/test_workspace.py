@@ -105,3 +105,47 @@ async def test_mcp_provider_registers_only_allowlisted_tools() -> None:
     )
 
     assert result.output["structured_content"] == {"result": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_workspace_read_tool_is_confined_to_workspace(tmp_path: Path) -> None:
+    from titan.runtime.tools import (
+        ToolCall,
+        ToolExecutionContext,
+        ToolExecutor,
+        build_default_tool_registry,
+    )
+
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.ensure(str(uuid4()), str(uuid4()))
+    (workspace.root / "README.md").write_text("hello", encoding="utf-8")
+
+    executor = ToolExecutor(build_default_tool_registry())
+    result = await executor.execute(
+        ToolCall(name="workspace.read_text", arguments={"path": "README.md"}),
+        ToolExecutionContext(
+            task_id=workspace.task_id,
+            run_id=str(uuid4()),
+            project_id=workspace.project_id,
+            task_risk="R1",
+            agent_risk_ceiling="R1",
+            workspace=workspace.root,
+        ),
+        allowed_tools=("workspace.read_text",),
+    )
+
+    assert result.output["content"] == "hello"
+
+    with pytest.raises(PermissionError, match="escapes"):
+        await executor.execute(
+            ToolCall(name="workspace.read_text", arguments={"path": "../../secret.txt"}),
+            ToolExecutionContext(
+                task_id=workspace.task_id,
+                run_id=str(uuid4()),
+                project_id=workspace.project_id,
+                task_risk="R1",
+                agent_risk_ceiling="R1",
+                workspace=workspace.root,
+            ),
+            allowed_tools=("workspace.read_text",),
+        )
