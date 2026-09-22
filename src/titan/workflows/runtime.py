@@ -1,4 +1,5 @@
 from datetime import timedelta
+
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
@@ -13,7 +14,6 @@ with workflow.unsafe.imports_passed_through():
     )
 
 
-@workflow.defn
 RETRY_POLICY = RetryPolicy(initial_interval=timedelta(seconds=1), maximum_attempts=3)
 
 
