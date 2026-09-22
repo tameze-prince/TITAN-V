@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from titan.api.app import app
+from titan.config import settings
 from titan.integrations.temporal.client import get_temporal_client
 from titan.persistence.database import SessionFactory
 from titan.persistence.models import EventModel, ProjectModel, TaskModel, WorkflowModel
@@ -78,7 +79,7 @@ async def test_create_and_start_workflow_persists_graph() -> None:
 
     assert response.status_code == 201
     assert len(fake_temporal.started) == 1
-    assert fake_temporal.started[0]["task_queue"] == "titan-core"
+    assert fake_temporal.started[0]["task_queue"] == settings.temporal_task_queue
 
     async with SessionFactory() as session:
         workflow_id = response.json()["id"]
