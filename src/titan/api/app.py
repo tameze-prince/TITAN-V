@@ -11,7 +11,11 @@ from titan import __version__
 from titan.config import settings
 from titan.integrations.temporal.client import get_temporal_client
 from titan.persistence.database import close_database, get_session
-from titan.persistence.models import EventModel, ProjectModel, TaskModel, WorkflowModel
+from titan.persistence.models import EventModel, IntentRecordModel, ProjectModel, TaskModel, WorkflowModel
+from titan.runtime.intent import IntentCompiler, IntentRepresentation
+from titan.runtime.memory import MemoryStore
+from titan.runtime.model_router import ModelBudget, ModelSelectionRequest
+from titan.runtime.service import get_agent_runtime
 from titan.workflows.contracts import WorkflowInput
 from titan.workflows.runtime import TitanWorkflow
 
@@ -64,6 +68,26 @@ class WorkflowResponse(BaseModel):
     status: str
     temporal_workflow_id: str | None
     temporal_run_id: str | None
+
+    model_config = {"from_attributes": True}
+
+
+
+class IntentCompileRequest(BaseModel):
+    raw_intent: str = Field(min_length=1, max_length=20_000)
+    user_context: dict = Field(default_factory=dict)
+    project_context: dict = Field(default_factory=dict)
+
+
+class IntentCompileResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    raw_intent: str
+    compiled: IntentRepresentation
+    provider: str
+    model: str
+    status: str
+    version: int
 
     model_config = {"from_attributes": True}
 
@@ -121,6 +145,112 @@ async def get_project(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return project
 
+
+
+@app.post(
+    "/api/v1/projects/{project_id}/intent",
+    status_code=status.HTTP_201_CREATED,
+    response_model=IntentCompileResponse,
+)
+async def compile_project_intent(
+    project_id: UUID,
+    payload: IntentCompileRequest,
+    session: AsyncSession = Depends(get_session),
+) -> IntentRecordModel:
+    project = await session.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    runtime = get_agent_runtime()
+    selection = runtime.model_router.select(
+        ModelSelectionRequest(
+            preferred_model=runtime.contracts.resolve("general-executor").model,
+            minimum_quality_tier=1,
+            budget=ModelBudget(
+                max_input_tokens=settings.model_max_input_tokens,
+                max_output_tokens=settings.model_max_output_tokens,
+                max_cost=settings.model_max_cost,
+            ),
+        )
+    )
+    compiler = IntentCompiler(selection.provider, selection.route.model)
+    try:
+        result = await compiler.compile(
+            raw_intent=payload.raw_intent,
+            project_context=payload.project_context,
+            user_context=payload.user_context,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Unable to compile project intent",
+        ) from exc
+
+    record = IntentRecordModel(
+        project_id=project_id,
+        raw_intent=payload.raw_intent,
+        compiled=result.representation.model_dump(mode="json"),
+        provider=result.provider,
+        model=result.model,
+        status="COMPILED",
+    )
+    session.add(record)
+
+    if project.objective is None:
+        project.objective = result.representation.desired_outcome or payload.raw_intent
+
+    memory_store = MemoryStore()
+    await memory_store.remember(
+        session,
+        project_id=project_id,
+        task_id=None,
+        kind="INTENT",
+        content=payload.raw_intent,
+        importance=90,
+        source_type="INTENT_COMPILER",
+        source_id=record.id,
+        metadata={
+            "provider": result.provider,
+            "model": result.model,
+            "required_capabilities": result.representation.required_capabilities,
+        },
+    )
+
+    session.add(
+        EventModel(
+            project_id=project_id,
+            type="IntentCompiled",
+            actor_type="SYSTEM",
+            aggregate_type="PROJECT",
+            aggregate_id=project_id,
+            payload={
+                "intent_record_id": str(record.id),
+                "provider": result.provider,
+                "model": result.model,
+                "required_capabilities": result.representation.required_capabilities,
+            },
+        )
+    )
+    session.add(
+        EventModel(
+            project_id=project_id,
+            type="ModelUsageRecorded",
+            actor_type="SYSTEM",
+            aggregate_type="PROJECT",
+            aggregate_id=project_id,
+            payload={
+                "component": "intent-compiler",
+                "intent_record_id": str(record.id),
+                "provider": result.provider,
+                "model": result.model,
+                "usage": result.usage,
+            },
+        )
+    )
+
+    await session.commit()
+    await session.refresh(record)
+    return record
 
 @app.post(
     "/api/v1/projects/{project_id}/tasks",
