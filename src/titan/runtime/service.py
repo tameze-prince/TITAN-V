@@ -32,7 +32,7 @@ ENGINEERING_AGENT = AgentContract(
         "and return structured evidence of the work performed."
     ),
     capabilities=("analysis", "structured-output", "artifact-write"),
-    allowed_tools=("sandbox.exec",),
+    allowed_tools=("workspace.list", "workspace.read_text", "sandbox.exec"),
     risk_ceiling="R2",
     model=(
         "openai:" + settings.openai_model
