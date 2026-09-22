@@ -11,6 +11,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -72,12 +73,49 @@ class ProjectModel(Base):
     workflows: Mapped[list["WorkflowModel"]] = relationship(
         back_populates="project", passive_deletes=True
     )
+    task_graphs: Mapped[list["TaskGraphModel"]] = relationship(
+        back_populates="project", passive_deletes=True
+    )
+    state: Mapped["ProjectStateModel | None"] = relationship(
+        back_populates="project", uselist=False, passive_deletes=True
+    )
     artifacts: Mapped[list["ArtifactModel"]] = relationship(
         back_populates="project", passive_deletes=True
     )
     events: Mapped[list["EventModel"]] = relationship(
         back_populates="project", passive_deletes=True
     )
+
+
+
+class ProjectStateModel(Base):
+    __tablename__ = "project_states"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="ACTIVE", server_default="ACTIVE"
+    )
+    phase: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="DISCOVERY", server_default="DISCOVERY"
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    state_json: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    project: Mapped[ProjectModel] = relationship(back_populates="state")
 
 
 class AgentModel(Base):
@@ -106,6 +144,9 @@ class WorkflowModel(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
+    task_graph_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("task_graphs.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     workflow_type: Mapped[str] = mapped_column(
         String(64), nullable=False, default="GENERIC", server_default="GENERIC"
@@ -125,8 +166,43 @@ class WorkflowModel(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     project: Mapped[ProjectModel] = relationship(back_populates="workflows")
+    task_graph: Mapped["TaskGraphModel | None"] = relationship(back_populates="workflows")
     tasks: Mapped[list["TaskModel"]] = relationship(back_populates="workflow")
     runs: Mapped[list["RunModel"]] = relationship(back_populates="workflow")
+
+
+
+class TaskGraphModel(Base):
+    __tablename__ = "task_graphs"
+    __table_args__ = (
+        UniqueConstraint("project_id", "version", name="uq_task_graphs_project_version"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    intent_record_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("intent_records.id", ondelete="RESTRICT"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="READY", server_default="READY"
+    )
+    objective: Mapped[str] = mapped_column(Text, nullable=False)
+    plan_json: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    project: Mapped[ProjectModel] = relationship(back_populates="task_graphs")
+    intent_record: Mapped["IntentRecordModel"] = relationship()
+    workflows: Mapped[list["WorkflowModel"]] = relationship(back_populates="task_graph")
+    tasks: Mapped[list["TaskModel"]] = relationship(back_populates="task_graph", passive_deletes=True)
 
 
 class TaskModel(Base):
@@ -141,6 +217,14 @@ class TaskModel(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    task_graph_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("task_graphs.id", ondelete="SET NULL"), nullable=True
+    )
+    task_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    required_capabilities: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
     )
     workflow_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="SET NULL"), nullable=True
@@ -167,6 +251,7 @@ class TaskModel(Base):
     )
 
     project: Mapped[ProjectModel] = relationship(back_populates="tasks")
+    task_graph: Mapped[TaskGraphModel | None] = relationship(back_populates="tasks")
     workflow: Mapped[WorkflowModel | None] = relationship(back_populates="tasks")
     owner_agent: Mapped[AgentModel | None] = relationship(back_populates="tasks")
     runs: Mapped[list["RunModel"]] = relationship(back_populates="task")
