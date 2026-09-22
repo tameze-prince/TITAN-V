@@ -1,10 +1,25 @@
+import os
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
+from sqlalchemy import select
 
+from titan.persistence.database import SessionFactory
+from titan.persistence.models import ProjectModel
 from titan.runtime.evaluation_service import EvaluationCheck, EvaluationEngine
 from titan.runtime.memory import MemoryStore
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("TITAN_RUN_INTEGRATION") != "1",
+    reason="Persistence tests require TITAN_RUN_INTEGRATION=1 and PostgreSQL",
+)
+
+
+@pytest_asyncio.fixture
+async def postgres_session_factory():
+    yield SessionFactory
 
 
 @pytest.mark.asyncio
@@ -13,6 +28,9 @@ async def test_memory_store_searches_relevant_project_memory(postgres_session_fa
     project_id = uuid4()
 
     async with postgres_session_factory() as session:
+        session.add(ProjectModel(id=project_id, name=f"memory-project-{project_id}"))
+        await session.flush()
+
         await store.remember(
             session,
             project_id=project_id,
@@ -33,6 +51,11 @@ async def test_memory_store_searches_relevant_project_memory(postgres_session_fa
         await session.commit()
 
         hits = await store.search(session, project_id=project_id, query="workflow runtime")
+
+        await session.delete(await session.scalar(
+            select(ProjectModel).where(ProjectModel.id == project_id)
+        ))
+        await session.commit()
 
     assert len(hits) == 1
     assert hits[0].kind == "DECISION"
@@ -74,6 +97,9 @@ async def test_evaluation_engine_persists_and_plans_repair(postgres_session_fact
     project_id = uuid4()
 
     async with postgres_session_factory() as session:
+        session.add(ProjectModel(id=project_id, name=f"evaluation-project-{project_id}"))
+        await session.flush()
+
         evaluation = await engine.persist(
             session,
             project_id=project_id,
@@ -91,6 +117,11 @@ async def test_evaluation_engine_persists_and_plans_repair(postgres_session_fact
             diagnosis="Required evidence was not produced.",
             corrective_action="Collect evidence before finalizing the artifact.",
         )
+        await session.commit()
+
+        await session.delete(await session.scalar(
+            select(ProjectModel).where(ProjectModel.id == project_id)
+        ))
         await session.commit()
 
     assert evaluation.status == "FAILED"
