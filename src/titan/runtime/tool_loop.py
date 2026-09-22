@@ -94,6 +94,7 @@ class AgentToolLoop:
         previous_response_id: str | None = None
         history: list[dict[str, Any]] = []
         final_text = ""
+        tool_call_count = 0
 
         for step in range(self.policy.max_steps):
             turn = await provider.generate_tool_turn(
@@ -112,7 +113,8 @@ class AgentToolLoop:
                     tool_results=[item for item in history if item["kind"] == "tool_result"],
                 )
 
-            if len(history) + len(turn.tool_calls) > self.policy.max_tool_calls:
+            tool_call_count += len(turn.tool_calls)
+            if tool_call_count > self.policy.max_tool_calls:
                 raise RuntimeError("Tool loop exceeded the maximum tool-call budget")
 
             outputs: list[dict[str, Any]] = []
