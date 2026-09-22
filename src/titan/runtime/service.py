@@ -77,6 +77,12 @@ class AgentContractRegistry:
         except KeyError as exc:
             raise KeyError(f"Agent contract '{name}' is not registered") from exc
 
+    def all(self) -> tuple[AgentContract, ...]:
+        return tuple(
+            self._contracts[name]
+            for name in sorted(self._contracts)
+        )
+
 
 class AgentRuntime:
     def __init__(
