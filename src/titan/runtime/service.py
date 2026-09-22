@@ -10,6 +10,7 @@ from titan.runtime.contracts import (
     AgentTaskContext,
 )
 from titan.runtime.evaluation import evaluate_execution
+from titan.runtime.tool_loop import AgentToolLoop
 from titan.runtime.policies import RuntimePolicy
 from titan.runtime.providers import ModelRequest, build_default_provider_router
 from titan.runtime.sandbox import DockerSandbox, SandboxPolicy
@@ -106,6 +107,7 @@ class AgentRuntime:
         )
         self.tool_executor = ToolExecutor(self.tools, policy=self.policy)
         self.workspace_manager = WorkspaceManager(settings.workspace_root)
+        self.tool_loop = AgentToolLoop()
 
 
     async def execute_tool(
@@ -193,10 +195,53 @@ class AgentRuntime:
         )
 
         started = perf_counter()
-        response = await provider.generate(request, AgentModelOutput)
+
+        if tool_names:
+            workspace = self.workspace_manager.ensure(
+                context.project_id,
+                context.task_id,
+            ).root
+            tool_definitions = self.tools.resolve_many(tool_names)
+            if not hasattr(provider, "generate_tool_turn"):
+                raise TypeError(
+                    f"Provider '{response.provider if 'response' in locals() else type(provider).__name__}' "
+                    "does not support tool calling"
+                )
+
+            loop_result = await self.tool_loop.run(
+                provider=provider,
+                contract=contract,
+                task=context,
+                workspace=workspace,
+                tools=tool_definitions,
+                executor=self.tool_executor,
+            )
+            parsed = AgentModelOutput(
+                summary=loop_result.final_text or "Tool loop completed without final text.",
+                result={
+                    "tool_calls": loop_result.tool_calls,
+                    "tool_results": loop_result.tool_results,
+                },
+                artifact_markdown=(
+                    "# Agent Tool Execution\n\n"
+                    f"## Summary\n{loop_result.final_text}\n\n"
+                    "## Tool trace\n"
+                    f"{loop_result.tool_results}"
+                ),
+            )
+            provider_name = provider.name
+            model_name = contract.model
+            usage = {"tool_calls": len(loop_result.tool_calls)}
+        else:
+            response = await provider.generate(request, AgentModelOutput)
+            parsed = response.parsed
+            provider_name = response.provider
+            model_name = response.model
+            usage = response.usage
+
         evaluation = evaluate_execution(
-            output=response.parsed,
-            artifact_markdown=response.parsed.artifact_markdown,
+            output=parsed,
+            artifact_markdown=parsed.artifact_markdown,
         )
         duration_ms = int((perf_counter() - started) * 1000)
 
@@ -207,12 +252,12 @@ class AgentRuntime:
             task_id=context.task_id,
             agent_name=contract.name,
             agent_version=contract.version,
-            provider=response.provider,
-            model=response.model,
+            provider=provider_name,
+            model=model_name,
             status="COMPLETED",
             output=response.parsed,
             duration_ms=duration_ms,
-            usage=response.usage,
+            usage=usage,
             evaluation=evaluation.model_dump(),
         )
 
