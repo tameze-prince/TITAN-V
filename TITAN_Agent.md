@@ -8384,3 +8384,168 @@ Workflow
 ---
 
 # END OF MODEL ROUTER + COST GOVERNANCE CHECKPOINT
+
+---
+
+# 214. TITAN PROJECT STATE + INTENT COMPILER FOUNDATION CHECKPOINT — 2026-09-22
+
+## Status
+
+The first implementation of the Intent Compiler boundary is now available.
+
+Implemented:
+
+~~~text
+[X] IntentRepresentation schema
+[X] IntentCompiler provider boundary
+[X] Deterministic local intent compilation fallback
+[X] OpenAI-compatible structured intent compilation path
+[X] Intent record persistence
+[X] Project/task-independent intent memory
+[X] IntentCompiled event
+[X] Intent compiler usage audit event
+[X] Project objective initialization from compiled intent
+[X] POST /api/v1/projects/{project_id}/intent
+[X] Intent compiler unit tests
+[X] Database migration 0004
+~~~
+
+## Intent compilation path
+
+~~~text
+User Intent
+    ↓
+Intent API
+    ↓
+Model Router
+    ↓
+IntentCompiler
+    ↓
+IntentRepresentation
+    ↓
+IntentRecord
+    ↓
+Memory
+    ↓
+Project State
+    ↓
+Future Planner / Task Graph
+~~~
+
+## IntentRepresentation
+
+The initial structured representation captures:
+
+~~~text
+problem
+target_users
+desired_outcome
+constraints
+unknowns
+assumptions
+risks
+research_questions
+candidate_deliverables
+required_capabilities
+~~~
+
+This becomes the handoff contract between natural-language intent and the future planner.
+
+## Project state
+
+A compiled intent is now durable project state.
+
+When a project has no objective yet, the compiler initializes the project objective from the compiled desired outcome.
+
+The full representation remains stored separately so future planner versions can evolve without losing the original raw intent.
+
+## Intent provenance
+
+The system records:
+
+~~~text
+raw intent
+compiled representation
+provider
+model
+version
+usage
+created timestamp
+~~~
+
+and emits durable events so compilation is traceable.
+
+## Local development behavior
+
+Without an external model provider, TITAN can still compile a deterministic baseline representation locally.
+
+This is explicitly a development fallback.
+
+Production deployments may route intent compilation through configured model providers and the ModelRouter governance layer.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] intent ambiguity scoring
+[ ] contradiction detection
+[ ] scope inflation detection
+[ ] capability ontology resolution
+[ ] automatic research planning
+[ ] automatic task graph synthesis
+[ ] planner approval flow
+[ ] project state machine
+[ ] intent version comparison
+[ ] intent change impact analysis
+[ ] human intent confirmation UI
+~~~
+
+## New architectural decisions
+
+~~~text
+DEC-078
+Intent is represented by a versioned structured IntentRepresentation
+before planning begins.
+
+DEC-079
+Raw intent and compiled intent are stored separately.
+
+DEC-080
+Intent compilation is provider-neutral and uses the existing model
+governance boundary.
+
+DEC-081
+Compiled intent becomes durable project knowledge and is recorded in
+the memory layer.
+
+DEC-082
+The first intent API is a compilation endpoint; task planning remains
+a separate subsystem.
+~~~
+
+## Next phase
+
+~~~text
+TITAN TASK GRAPH + PROJECT STATE FOUNDATION
+~~~
+
+The next layer will transform compiled intent into durable execution state:
+
+~~~text
+IntentRepresentation
+        ↓
+Capability Resolution
+        ↓
+Task Graph
+        ↓
+Dependencies
+        ↓
+Agent Assignment
+        ↓
+Workflow
+~~~
+
+---
+
+# END OF PROJECT STATE + INTENT COMPILER FOUNDATION CHECKPOINT
