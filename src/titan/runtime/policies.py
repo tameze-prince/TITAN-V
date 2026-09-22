@@ -45,6 +45,39 @@ class RuntimePolicy:
 
         return PolicyDecision(True, "Policy checks passed")
 
+    def check_tool(
+        self,
+        *,
+        task_risk: str,
+        agent_risk_ceiling: str,
+        tool_risk: str,
+        tool_name: str,
+        allowed_tools: tuple[str, ...],
+    ) -> PolicyDecision:
+        self._validate_risk(task_risk)
+        self._validate_risk(agent_risk_ceiling)
+        self._validate_risk(tool_risk)
+
+        if tool_name not in allowed_tools:
+            return PolicyDecision(
+                False,
+                f"Tool '{tool_name}' is not allowed by the agent contract",
+            )
+
+        if RISK_ORDER[tool_risk] > RISK_ORDER[task_risk]:
+            return PolicyDecision(
+                False,
+                f"Tool '{tool_name}' risk exceeds the task risk level",
+            )
+
+        if RISK_ORDER[tool_risk] > RISK_ORDER[agent_risk_ceiling]:
+            return PolicyDecision(
+                False,
+                f"Tool '{tool_name}' risk exceeds the agent risk ceiling",
+            )
+
+        return PolicyDecision(True, "Tool policy checks passed")
+
     @staticmethod
     def _validate_risk(risk_level: str) -> None:
         if risk_level not in RISK_ORDER:
