@@ -7556,3 +7556,199 @@ validated terminal state.
 ---
 
 # END OF WORKSPACE + MCP FOUNDATION CHECKPOINT
+
+---
+
+# 210. TITAN TOOL-CALL LOOP + CONTEXT ENGINE CHECKPOINT — 2026-09-22
+
+## Status
+
+The first bounded agent tool-call loop and runtime context engine are now implemented.
+
+Implemented:
+
+~~~text
+[X] ContextEngine
+[X] Structured tool manifest
+[X] Tool schema exposure to model providers
+[X] ModelToolCall contract
+[X] ModelToolTurn contract
+[X] Provider-neutral ToolAwareModelProvider boundary
+[X] Bounded AgentToolLoop
+[X] Maximum step budget
+[X] Maximum tool-call budget
+[X] Tool execution failure returned as governed tool output
+[X] OpenAI Responses tool-call adapter
+[X] Local deterministic tool-loop provider
+[X] Tool-call output chaining through previous response IDs
+[X] Engineering agent integration with the loop
+[X] External data marked untrusted in context instructions
+[X] Integration unit test for tool-enabled agent execution
+~~~
+
+## Runtime path
+
+~~~text
+Task
+ ↓
+ContextEngine
+ ↓
+Agent Contract
+ ↓
+Tool Schemas
+ ↓
+Model Provider
+ ↓
+Model Tool Call
+ ↓
+Tool Policy
+ ↓
+ToolExecutor
+ ↓
+Workspace / Sandbox / MCP
+ ↓
+function_call_output
+ ↓
+Model Provider
+ ↓
+Repeat until terminal state
+ ↓
+Structured Agent Result
+ ↓
+Evaluation
+ ↓
+Artifact
+~~~
+
+## Context composition
+
+The context engine assembles:
+
+~~~text
+agent instructions
+task identity
+project identity
+objective
+risk level
+workspace location
+available tool descriptions
+tool schemas
+task inputs
+prior evidence references
+~~~
+
+External workspace content and tool results are explicitly marked as untrusted evidence so the model is not instructed to treat external text as privileged runtime instructions.
+
+## Loop governance
+
+The first loop policy is:
+
+~~~text
+max_steps = 8
+max_tool_calls = 24
+~~~
+
+A task cannot continue indefinitely through autonomous tool calls.
+
+Every individual tool invocation still passes the existing:
+
+~~~text
+registered tool
+agent allowlist
+task risk
+agent risk ceiling
+~~~
+
+policy checks.
+
+## OpenAI adapter boundary
+
+The OpenAI provider now exposes a provider-neutral tool-turn method.
+
+The adapter handles:
+
+~~~text
+function_call
+call_id
+JSON arguments
+function_call_output
+previous_response_id chaining
+~~~
+
+The AgentToolLoop itself does not depend on OpenAI types.
+
+This preserves provider independence.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] persistent conversation state
+[ ] long-term memory retrieval
+[ ] vector context retrieval
+[ ] context relevance ranking
+[ ] automatic context compaction
+[ ] model token budget accounting
+[ ] per-tool cost accounting
+[ ] streaming tool-call events
+[ ] parallel tool-call scheduling
+[ ] human approval interruption inside the loop
+[ ] durable loop checkpoint recovery
+~~~
+
+Those are intentionally separate concerns.
+
+## New architectural decisions
+
+~~~text
+DEC-055
+Tool-enabled agents execute through a provider-neutral AgentToolLoop.
+
+DEC-056
+AgentToolLoop uses explicit step and tool-call budgets.
+
+DEC-057
+Tool execution errors are returned to the model as tool results rather
+than immediately terminating the loop, allowing controlled recovery.
+
+DEC-058
+ContextEngine is a separate component from AgentRuntime and provider
+adapters.
+
+DEC-059
+Model providers expose tool-call capability through a dedicated
+ToolAwareModelProvider boundary.
+
+DEC-060
+OpenAI-specific response items are translated into TITAN-owned
+ModelToolCall objects before entering ToolExecutor.
+~~~
+
+## Next phase
+
+~~~text
+TITAN MEMORY + EVALUATION FOUNDATION
+~~~
+
+The next layer must make the runtime persistent and self-correcting:
+
+~~~text
+Execution
+ ↓
+Working Memory
+ ↓
+Artifact / Event History
+ ↓
+Evaluation
+ ↓
+Failure Diagnosis
+ ↓
+Context Revision
+ ↓
+Retry / Repair
+~~~
+
+---
+
+# END OF TOOL-CALL LOOP + CONTEXT ENGINE CHECKPOINT
