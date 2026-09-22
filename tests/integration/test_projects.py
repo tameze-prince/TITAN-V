@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from titan.api.app import app
 from titan.persistence.database import SessionFactory
-from titan.persistence.models import ProjectModel
+from titan.persistence.models import EventModel, ProjectModel
 
 pytestmark = pytest.mark.skipif(
     os.getenv("TITAN_RUN_INTEGRATION") != "1",
@@ -36,11 +36,18 @@ async def test_create_project_persists_and_emits_event() -> None:
         assert project is not None
         assert str(project.id) == payload["id"]
         assert project.objective == "Verify persistence"
+        assert project.status == "ACTIVE"
 
-        result = await session.execute(
-            select(ProjectModel).where(ProjectModel.id == project.id)
+        event = await session.scalar(
+            select(EventModel)
+            .where(
+                EventModel.project_id == project.id,
+                EventModel.type == "ProjectCreated",
+            )
+            .order_by(EventModel.occurred_at.desc())
         )
-        assert result.scalar_one().status == "ACTIVE"
+        assert event is not None
+        assert event.aggregate_id == project.id
 
         await session.delete(project)
         await session.commit()
