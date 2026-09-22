@@ -1,5 +1,6 @@
 from datetime import timedelta
 from temporalio import workflow
+from temporalio.common import RetryPolicy
 
 from titan.workflows.contracts import WorkflowInput, WorkflowResult
 
@@ -10,6 +11,10 @@ with workflow.unsafe.imports_passed_through():
         mark_workflow_started,
         orchestrate_task,
     )
+
+
+@workflow.defn
+RETRY_POLICY = RetryPolicy(initial_interval=timedelta(seconds=1), maximum_attempts=3)
 
 
 @workflow.defn
@@ -25,6 +30,7 @@ class TitanWorkflow:
             temporal_workflow_id,
             temporal_run_id,
             start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=RETRY_POLICY,
         )
 
         completed_task_ids: list[str] = []
@@ -37,6 +43,7 @@ class TitanWorkflow:
                     task_id,
                     run_id,
                     start_to_close_timeout=timedelta(seconds=60),
+                    retry_policy=RETRY_POLICY,
                 )
                 completed_task_ids.append(task_id)
 
@@ -46,6 +53,7 @@ class TitanWorkflow:
                 run_id,
                 tuple(completed_task_ids),
                 start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=RETRY_POLICY,
             )
 
             return WorkflowResult(
@@ -61,5 +69,6 @@ class TitanWorkflow:
                 run_id,
                 str(exc),
                 start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=RETRY_POLICY,
             )
             raise
