@@ -8,7 +8,6 @@ from titan.runtime.tools import (
     ToolCall,
     ToolDefinition,
     ToolExecutionContext,
-    ToolExecutionResult,
     ToolExecutor,
 )
 
