@@ -1,3 +1,4 @@
+import asyncio
 import os
 from uuid import uuid4
 
@@ -70,11 +71,14 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
             project_id=str(uuid4()),
             task_ids=(str(uuid4()), str(uuid4())),
         )
-        result = await client.execute_workflow(
-            TitanWorkflow.run,
-            request,
-            id=f"titan-test-workflow-{uuid4()}",
-            task_queue=task_queue,
+        result = await asyncio.wait_for(
+            client.execute_workflow(
+                TitanWorkflow.run,
+                request,
+                id=f"titan-test-workflow-{uuid4()}",
+                task_queue=task_queue,
+            ),
+            timeout=30,
         )
 
     assert result.status == "COMPLETED"
