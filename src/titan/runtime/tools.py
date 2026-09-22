@@ -45,6 +45,7 @@ class ToolDefinition:
         "properties": {},
         "additionalProperties": True,
     })
+    strict: bool = True
 
 
 class ToolRegistry:
