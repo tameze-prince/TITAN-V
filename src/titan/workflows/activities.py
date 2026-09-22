@@ -10,13 +10,15 @@ from titan.persistence.models import EventModel, RunModel, TaskModel, WorkflowMo
 
 @activity.defn
 async def mark_workflow_started(
-    workflow_id: UUID,
+    workflow_id: str,
     temporal_workflow_id: str,
     temporal_run_id: str,
-) -> UUID:
+) -> str:
+    workflow_uuid = UUID(workflow_id)
+
     async with SessionFactory() as session:
         workflow = await session.scalar(
-            select(WorkflowModel).where(WorkflowModel.id == workflow_id)
+            select(WorkflowModel).where(WorkflowModel.id == workflow_uuid)
         )
         if workflow is None:
             raise ValueError(f"Workflow {workflow_id} not found")
@@ -25,10 +27,10 @@ async def mark_workflow_started(
             select(RunModel).where(RunModel.temporal_run_id == temporal_run_id)
         )
         if existing_run is not None:
-            return existing_run.id
+            return str(existing_run.id)
 
         run = RunModel(
-            workflow_id=workflow_id,
+            workflow_id=workflow_uuid,
             temporal_workflow_id=temporal_workflow_id,
             temporal_run_id=temporal_run_id,
         )
@@ -53,21 +55,24 @@ async def mark_workflow_started(
         )
 
         await session.commit()
-        return run.id
+        return str(run.id)
 
 
 @activity.defn
 async def orchestrate_task(
-    workflow_id: UUID,
-    task_id: UUID,
-    run_id: UUID,
+    workflow_id: str,
+    task_id: str,
+    run_id: str,
 ) -> bool:
+    workflow_uuid = UUID(workflow_id)
+    task_uuid = UUID(task_id)
+
     async with SessionFactory() as session:
-        task = await session.scalar(select(TaskModel).where(TaskModel.id == task_id))
+        task = await session.scalar(select(TaskModel).where(TaskModel.id == task_uuid))
         if task is None:
             raise ValueError(f"Task {task_id} not found")
 
-        if task.workflow_id != workflow_id:
+        if task.workflow_id != workflow_uuid:
             raise ValueError(f"Task {task_id} does not belong to workflow {workflow_id}")
 
         task.status = "RUNNING"
@@ -78,7 +83,7 @@ async def orchestrate_task(
                 actor_type="SYSTEM",
                 aggregate_type="TASK",
                 aggregate_id=task.id,
-                payload={"run_id": str(run_id)},
+                payload={"run_id": run_id},
             )
         )
         await session.flush()
@@ -92,7 +97,7 @@ async def orchestrate_task(
                 actor_type="SYSTEM",
                 aggregate_type="TASK",
                 aggregate_id=task.id,
-                payload={"run_id": str(run_id)},
+                payload={"run_id": run_id},
             )
         )
         await session.commit()
@@ -102,15 +107,18 @@ async def orchestrate_task(
 
 @activity.defn
 async def mark_workflow_completed(
-    workflow_id: UUID,
-    run_id: UUID,
-    completed_task_ids: tuple[UUID, ...],
+    workflow_id: str,
+    run_id: str,
+    completed_task_ids: tuple[str, ...],
 ) -> None:
+    workflow_uuid = UUID(workflow_id)
+    run_uuid = UUID(run_id)
+
     async with SessionFactory() as session:
         workflow = await session.scalar(
-            select(WorkflowModel).where(WorkflowModel.id == workflow_id)
+            select(WorkflowModel).where(WorkflowModel.id == workflow_uuid)
         )
-        run = await session.scalar(select(RunModel).where(RunModel.id == run_id))
+        run = await session.scalar(select(RunModel).where(RunModel.id == run_uuid))
         if workflow is None or run is None:
             raise ValueError("Workflow run state not found")
 
@@ -136,15 +144,18 @@ async def mark_workflow_completed(
 
 @activity.defn
 async def mark_workflow_failed(
-    workflow_id: UUID,
-    run_id: UUID,
+    workflow_id: str,
+    run_id: str,
     error_message: str,
 ) -> None:
+    workflow_uuid = UUID(workflow_id)
+    run_uuid = UUID(run_id)
+
     async with SessionFactory() as session:
         workflow = await session.scalar(
-            select(WorkflowModel).where(WorkflowModel.id == workflow_id)
+            select(WorkflowModel).where(WorkflowModel.id == workflow_uuid)
         )
-        run = await session.scalar(select(RunModel).where(RunModel.id == run_id))
+        run = await session.scalar(select(RunModel).where(RunModel.id == run_uuid))
         if workflow is None or run is None:
             raise ValueError("Workflow run state not found")
 
