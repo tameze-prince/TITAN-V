@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from hashlib import sha256
 from uuid import UUID
 
 from sqlalchemy import select
@@ -105,6 +106,7 @@ async def orchestrate_task(
 
         try:
             execution = await runtime.execute(context)
+            artifact_content = execution.model_dump_json()
 
             artifact = ArtifactModel(
                 project_id=task.project_id,
@@ -112,7 +114,8 @@ async def orchestrate_task(
                 title=f"{task.title} — agent result",
                 status="FINAL",
                 media_type="application/json",
-                content_ref=execution.model_dump_json(),
+                content_ref=artifact_content,
+                checksum=sha256(artifact_content.encode("utf-8")).hexdigest(),
             )
             session.add(artifact)
 
@@ -137,7 +140,7 @@ async def orchestrate_task(
                     payload={
                         "task_id": task_id,
                         "artifact_type": artifact.type,
-                        "checksum_pending": True,
+                        "checksum": artifact.checksum,
                     },
                 )
             )
