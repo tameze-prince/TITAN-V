@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     object_storage_endpoint: str = "http://localhost:9000"
     object_storage_bucket: str = "titan"
     otel_endpoint: str = "http://localhost:4317"
+    model_provider: str = "local"
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-5"
+    openai_base_url: str | None = None
+    agent_execution_timeout_seconds: int = 120
 
     model_config = SettingsConfigDict(
         env_prefix="TITAN_",
