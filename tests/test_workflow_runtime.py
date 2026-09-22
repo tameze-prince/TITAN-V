@@ -35,18 +35,17 @@ async def fake_mark_workflow_failed(workflow_id, run_id, error_message: str) -> 
 
 @pytest.mark.asyncio
 async def test_titan_workflow_orchestrates_tasks() -> None:
-    async with await WorkflowEnvironment.start_time_skipping() as env:
-        async with Worker(
-            env.client,
-            task_queue="titan-test",
-            workflows=[TitanWorkflow],
-            activities=[
-                fake_mark_workflow_started,
-                fake_orchestrate_task,
-                fake_mark_workflow_completed,
-                fake_mark_workflow_failed,
-            ],
-        ):
+    async with await WorkflowEnvironment.start_time_skipping() as env, Worker(
+        env.client,
+        task_queue="titan-test",
+        workflows=[TitanWorkflow],
+        activities=[
+            fake_mark_workflow_started,
+            fake_orchestrate_task,
+            fake_mark_workflow_completed,
+            fake_mark_workflow_failed,
+        ],
+    ):
             request = WorkflowInput(
                 workflow_id=uuid4(),
                 project_id=uuid4(),
