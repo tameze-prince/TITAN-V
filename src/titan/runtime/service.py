@@ -22,6 +22,24 @@ from titan.runtime.tools import (
 )
 
 
+ENGINEERING_AGENT = AgentContract(
+    name="engineering-executor",
+    role="Engineering Task Executor",
+    instructions=(
+        "Inspect the assigned engineering task, use only explicitly allowed tools, "
+        "and return structured evidence of the work performed."
+    ),
+    capabilities=("analysis", "structured-output", "artifact-write"),
+    allowed_tools=("sandbox.exec",),
+    risk_ceiling="R2",
+    model=(
+        "openai:" + settings.openai_model
+        if settings.model_provider == "openai" and settings.openai_api_key
+        else "local"
+    ),
+)
+
+
 GENERAL_AGENT = AgentContract(
     name="general-executor",
     role="General Task Executor",
@@ -65,7 +83,7 @@ class AgentRuntime:
         tools=None,
         policy: RuntimePolicy | None = None,
     ) -> None:
-        self.contracts = contracts or AgentContractRegistry((GENERAL_AGENT,))
+        self.contracts = contracts or AgentContractRegistry((GENERAL_AGENT, ENGINEERING_AGENT))
         self.capabilities = capabilities or build_default_capability_registry()
         self.providers = providers or build_default_provider_router(
             openai_api_key=settings.openai_api_key,
