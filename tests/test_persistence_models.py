@@ -1,5 +1,5 @@
+from titan.persistence import models
 from titan.persistence.base import Base
-from titan.persistence import models  # noqa: F401
 
 
 def test_core_tables_are_registered() -> None:
