@@ -283,6 +283,31 @@ async def compile_project_intent(
     if project.objective is None:
         project.objective = result.representation.desired_outcome or payload.raw_intent
 
+    state = await session.scalar(
+        select(ProjectStateModel).where(ProjectStateModel.project_id == project_id)
+    )
+    if state is None:
+        state = ProjectStateModel(
+            project_id=project_id,
+            status="ACTIVE",
+            phase="PLANNING",
+            version=1,
+        )
+        session.add(state)
+    else:
+        state.status = "ACTIVE"
+        state.phase = "PLANNING"
+        state.version += 1
+    state.state_json = {
+        **state.state_json,
+        "intent_record_id": str(record.id),
+        "objective": project.objective,
+        "unknowns": list(result.representation.unknowns),
+        "constraints": list(result.representation.constraints),
+        "risks": list(result.representation.risks),
+    }
+    project.current_phase = "PLANNING"
+
     memory_store = MemoryStore()
     await memory_store.remember(
         session,
