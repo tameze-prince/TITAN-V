@@ -13,6 +13,7 @@ from titan.runtime.contracts import (
 from titan.runtime.evaluation import evaluate_execution
 from titan.runtime.tool_loop import AgentToolLoop
 from titan.runtime.policies import RuntimePolicy
+from titan.runtime.model_router import ModelBudget, ModelRoute, ModelRouter, ModelSelectionRequest
 from titan.runtime.repair import AgentEvaluationFailure, RepairPlanner, RepairPolicy
 from titan.runtime.providers import ModelRequest, build_default_provider_router
 from titan.runtime.sandbox import DockerSandbox, SandboxPolicy
@@ -94,6 +95,28 @@ class AgentRuntime:
             openai_model=settings.openai_model,
             openai_base_url=settings.openai_base_url,
         )
+        self.model_router = ModelRouter(self.providers)
+        self.model_router.register(
+            ModelRoute(
+                name="local-default",
+                provider="local",
+                model="local",
+                quality_tier=1,
+                priority=10,
+            )
+        )
+        if settings.openai_api_key:
+            self.model_router.register(
+                ModelRoute(
+                    name=f"openai-{settings.openai_model}",
+                    provider="openai",
+                    model=f"openai:{settings.openai_model}",
+                    quality_tier=2,
+                    priority=20,
+                    input_cost_per_1k=settings.openai_input_cost_per_1k,
+                    output_cost_per_1k=settings.openai_output_cost_per_1k,
+                )
+            )
         self.policy = policy or RuntimePolicy()
         self.tools = tools or build_default_tool_registry(
             sandbox=DockerSandbox(
@@ -178,7 +201,18 @@ class AgentRuntime:
         if not decision.allowed:
             raise PermissionError(decision.reason)
 
-        provider = self.providers.resolve(contract.model)
+        selection = self.model_router.select(
+            ModelSelectionRequest(
+                preferred_model=contract.model,
+                minimum_quality_tier=contract.minimum_quality_tier,
+                budget=ModelBudget(
+                    max_input_tokens=settings.model_max_input_tokens,
+                    max_output_tokens=settings.model_max_output_tokens,
+                    max_cost=settings.model_max_cost,
+                ),
+            )
+        )
+        provider = selection.provider
         started = perf_counter()
         repair_context = dict(context.inputs)
 
@@ -193,7 +227,7 @@ class AgentRuntime:
             request = ModelRequest(
                 system_prompt=contract.instructions,
                 user_prompt=prompt,
-                model=contract.model,
+                model=selection.route.model,
                 metadata={
                     "task_id": execution_context.task_id,
                     "run_id": execution_context.run_id,
@@ -236,8 +270,9 @@ class AgentRuntime:
                     ),
                 )
                 provider_name = provider.name
-                model_name = contract.model
+                model_name = selection.route.model
                 usage = {
+                    **loop_result.usage,
                     "tool_calls": len(loop_result.tool_calls),
                     "repair_attempt": attempt,
                 }
@@ -257,6 +292,15 @@ class AgentRuntime:
             )
 
             if evaluation.passed:
+                usage = self.model_router.enforce_usage(
+                    route=selection.route,
+                    usage=usage,
+                    budget=ModelBudget(
+                        max_input_tokens=settings.model_max_input_tokens,
+                        max_output_tokens=settings.model_max_output_tokens,
+                        max_cost=settings.model_max_cost,
+                    ),
+                )
                 usage["repair_attempts_total"] = attempt - 1
                 duration_ms = int((perf_counter() - started) * 1000)
                 return AgentExecutionResult(
