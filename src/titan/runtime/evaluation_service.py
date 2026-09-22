@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
-from typing import Any, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
