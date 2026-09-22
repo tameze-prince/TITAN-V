@@ -13,11 +13,11 @@ from titan.runtime.planner import (
 
 __all__ = [
     "AgentRuntime",
+    "CapabilityResolutionError",
+    "CapabilityResolver",
     "EvaluationEngine",
     "IntentCompiler",
     "IntentRepresentation",
-    "CapabilityResolutionError",
-    "CapabilityResolver",
     "MemoryStore",
     "TaskGraphPlan",
     "TaskGraphPlanner",
