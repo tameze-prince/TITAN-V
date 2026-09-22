@@ -1,6 +1,4 @@
 from collections.abc import Sequence
-from uuid import UUID
-
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
