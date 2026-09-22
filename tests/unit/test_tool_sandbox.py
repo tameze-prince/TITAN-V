@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -130,6 +131,5 @@ def test_sandbox_rejects_missing_workspace(tmp_path: Path) -> None:
     async def run() -> None:
         await sandbox.run(SandboxRequest(command=("python", "-V"), workspace=missing))
 
-    with pytest.raises(Exception, match="workspace"):
-        import asyncio
+    with pytest.raises(RuntimeError, match="workspace"):
         asyncio.run(run())
