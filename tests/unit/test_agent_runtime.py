@@ -85,3 +85,136 @@ async def test_engineering_agent_uses_tool_loop_boundary() -> None:
     assert result.status == "COMPLETED"
     assert result.evaluation["passed"] is True
     assert "tool_calls" in result.output.result
+
+
+@pytest.mark.asyncio
+async def test_agent_runtime_retries_after_evaluation_failure(monkeypatch) -> None:
+    from titan.runtime.evaluation import EvaluationReport
+    from titan.runtime.providers import ModelResponse, ProviderRouter
+    from titan.runtime.repair import RepairPolicy
+    from titan.runtime.service import AgentContractRegistry
+
+    class FakeProvider:
+        name = "fake"
+
+        async def generate(self, request, output_model):
+            return ModelResponse(
+                provider=self.name,
+                model="fake-model",
+                parsed=AgentModelOutput(
+                    summary="valid summary",
+                    result={"ok": True},
+                    artifact_markdown="# Artifact",
+                ),
+            )
+
+    checks = iter(
+        [
+            EvaluationReport(
+                passed=False,
+                score=0.5,
+                checks={"artifact": False, "summary": True},
+                message="Artifact is missing",
+            ),
+            EvaluationReport(
+                passed=True,
+                score=1.0,
+                checks={"artifact": True, "summary": True},
+                message="Passed",
+            ),
+        ]
+    )
+
+    def fake_evaluate_execution(*, output, artifact_markdown):
+        return next(checks)
+
+    monkeypatch.setattr("titan.runtime.service.evaluate_execution", fake_evaluate_execution)
+
+    contract = AgentContract(
+        name="repair-agent",
+        role="Repair",
+        instructions="Repair and complete the task.",
+        capabilities=(),
+        model="fake:model",
+        risk_ceiling="R1",
+    )
+    runtime = AgentRuntime(
+        contracts=AgentContractRegistry((contract,)),
+        providers=ProviderRouter({"fake": FakeProvider()}),
+    )
+    runtime.repair_policy = RepairPolicy(max_attempts=1)
+
+    result = await runtime.execute(
+        AgentTaskContext(
+            task_id="task",
+            run_id="run",
+            project_id="project",
+            title="Repair",
+            objective="Produce an artifact",
+            risk_level="R1",
+        ),
+        agent_name="repair-agent",
+    )
+
+    assert result.status == "COMPLETED"
+    assert result.usage["repair_attempts_total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_agent_runtime_raises_durable_evaluation_failure_after_repair_budget(monkeypatch) -> None:
+    from titan.runtime.evaluation import EvaluationReport
+    from titan.runtime.providers import ModelResponse, ProviderRouter
+    from titan.runtime.repair import AgentEvaluationFailure, RepairPolicy
+    from titan.runtime.service import AgentContractRegistry
+
+    class FakeProvider:
+        name = "fake"
+
+        async def generate(self, request, output_model):
+            return ModelResponse(
+                provider=self.name,
+                model="fake-model",
+                parsed=AgentModelOutput(
+                    summary="summary",
+                    result={},
+                    artifact_markdown="# Artifact",
+                ),
+            )
+
+    failed = EvaluationReport(
+        passed=False,
+        score=0.33,
+        checks={"artifact": False, "summary": True, "structure": False},
+        message="Evaluation failed",
+    )
+    monkeypatch.setattr("titan.runtime.service.evaluate_execution", lambda **_: failed)
+
+    contract = AgentContract(
+        name="repair-agent",
+        role="Repair",
+        instructions="Repair and complete the task.",
+        capabilities=(),
+        model="fake:model",
+        risk_ceiling="R1",
+    )
+    runtime = AgentRuntime(
+        contracts=AgentContractRegistry((contract,)),
+        providers=ProviderRouter({"fake": FakeProvider()}),
+    )
+    runtime.repair_policy = RepairPolicy(max_attempts=1)
+
+    with pytest.raises(AgentEvaluationFailure) as exc_info:
+        await runtime.execute(
+            AgentTaskContext(
+                task_id="task",
+                run_id="run",
+                project_id="project",
+                title="Repair",
+                objective="Produce an artifact",
+                risk_level="R1",
+            ),
+            agent_name="repair-agent",
+        )
+
+    assert exc_info.value.plan.attempt == 2
+    assert "artifact" in exc_info.value.plan.failed_checks
