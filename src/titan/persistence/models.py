@@ -65,10 +65,18 @@ class ProjectModel(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
-    tasks: Mapped[list["TaskModel"]] = relationship(back_populates="project")
-    workflows: Mapped[list["WorkflowModel"]] = relationship(back_populates="project")
-    artifacts: Mapped[list["ArtifactModel"]] = relationship(back_populates="project")
-    events: Mapped[list["EventModel"]] = relationship(back_populates="project")
+    tasks: Mapped[list["TaskModel"]] = relationship(
+        back_populates="project", passive_deletes=True
+    )
+    workflows: Mapped[list["WorkflowModel"]] = relationship(
+        back_populates="project", passive_deletes=True
+    )
+    artifacts: Mapped[list["ArtifactModel"]] = relationship(
+        back_populates="project", passive_deletes=True
+    )
+    events: Mapped[list["EventModel"]] = relationship(
+        back_populates="project", passive_deletes=True
+    )
 
 
 class AgentModel(Base):
