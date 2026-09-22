@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import ClassVar
 from uuid import uuid4
 
 import pytest
@@ -46,8 +47,8 @@ class FakeListed:
 
 
 class FakeResult:
-    structured_content = {"result": "ok"}
-    is_error = False
+    structured_content: ClassVar[dict[str, str]] = {"result": "ok"}
+    is_error: ClassVar[bool] = False
 
 
 class FakeClient:
@@ -99,7 +100,7 @@ async def test_mcp_provider_registers_only_allowlisted_tools() -> None:
             project_id=str(uuid4()),
             task_risk="R2",
             agent_risk_ceiling="R2",
-            workspace=Path(".").resolve(),
+            workspace=Path.cwd(),
         ),
         allowed_tools=("mcp.demo.lookup",),
     )
