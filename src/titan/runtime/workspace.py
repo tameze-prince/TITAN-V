@@ -24,14 +24,23 @@ class WorkspaceManager:
         project_uuid = self._validate_id(project_id)
         task_uuid = self._validate_id(task_id)
 
-        workspace_root = self.root / str(project_uuid) / str(task_uuid)
+        project_root = self.root / str(project_uuid)
+        project_root.mkdir(parents=True, exist_ok=True)
+        project_resolved = project_root.resolve()
+        if not self._is_within_root(project_resolved):
+            raise WorkspaceError("Project workspace escapes the configured workspace root")
+
+        workspace_root = project_resolved / str(task_uuid)
         workspace_root.mkdir(parents=True, exist_ok=True)
 
         resolved = workspace_root.resolve()
-        if not self._is_within_root(resolved):
-            raise WorkspaceError("Resolved workspace escapes the configured workspace root")
+        if not self._is_within_workspace(resolved, project_resolved):
+            raise WorkspaceError("Resolved workspace escapes the project workspace")
 
         metadata = resolved / ".titan-workspace.json"
+        if metadata.exists() and not self._is_within_workspace(metadata.resolve(), resolved):
+            raise WorkspaceError("Workspace metadata escapes the task workspace")
+
         if not metadata.exists():
             metadata.write_text(
                 json.dumps(
