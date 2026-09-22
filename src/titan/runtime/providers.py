@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import json
 from time import perf_counter
 from typing import Any
 
@@ -67,6 +68,23 @@ class LocalStructuredProvider(ModelProvider):
             usage={"elapsed_ms": elapsed_ms, "mode": "deterministic"},
         )
 
+    async def generate_tool_turn(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str | list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        previous_response_id: str | None,
+    ):
+        from titan.runtime.tool_loop import ModelToolTurn
+
+        return ModelToolTurn(
+            response_id=previous_response_id or "local-response",
+            text=f"Local tool-loop execution completed for: "
+            f"{user_prompt if isinstance(user_prompt, str) else 'tool results'}",
+            tool_calls=(),
+        )
+
 
 class OpenAIResponsesProvider(ModelProvider):
     name = "openai"
@@ -113,6 +131,61 @@ class OpenAIResponsesProvider(ModelProvider):
             model=self._model,
             parsed=parsed,
             usage=usage,
+        )
+
+    async def generate_tool_turn(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str | list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        previous_response_id: str | None,
+    ):
+        from titan.runtime.tool_loop import ModelToolCall, ModelToolTurn
+
+        if previous_response_id is None:
+            input_payload: str | list[dict[str, Any]] = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+        else:
+            input_payload = user_prompt
+
+        response = await self._client.responses.create(
+            model=self._model,
+            input=input_payload,
+            previous_response_id=previous_response_id,
+            tools=tools,
+            tool_choice="auto",
+        )
+
+        tool_calls: list[ModelToolCall] = []
+        for item in response.output:
+            if getattr(item, "type", None) != "function_call":
+                continue
+
+            arguments_raw = getattr(item, "arguments", "{}")
+            arguments = json.loads(arguments_raw)
+            if not isinstance(arguments, dict):
+                raise ValueError("Model tool arguments must be a JSON object")
+
+            call_id = getattr(item, "call_id", None)
+            name = getattr(item, "name", None)
+            if not isinstance(call_id, str) or not isinstance(name, str):
+                raise ValueError("Model function call is missing call_id or name")
+
+            tool_calls.append(
+                ModelToolCall(
+                    call_id=call_id,
+                    name=name,
+                    arguments=arguments,
+                )
+            )
+
+        return ModelToolTurn(
+            response_id=response.id,
+            text=response.output_text or "",
+            tool_calls=tuple(tool_calls),
         )
 
 
