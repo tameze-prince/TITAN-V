@@ -8549,3 +8549,231 @@ Workflow
 ---
 
 # END OF PROJECT STATE + INTENT COMPILER FOUNDATION CHECKPOINT
+
+
+---
+
+# 215. TITAN TASK GRAPH + PROJECT STATE FOUNDATION CHECKPOINT — 2026-09-22
+
+## Status
+
+TITAN can now transform a compiled intent into durable execution planning state.
+
+Implemented:
+
+~~~text
+[X] Capability normalization and resolution
+[X] Capability-to-agent assignment
+[X] Deterministic task graph synthesis
+[X] Dependency validation
+[X] Cycle detection
+[X] Topological task ordering
+[X] Persistent task graph versions
+[X] Persistent graph task nodes
+[X] Persistent task dependencies
+[X] Persisted required capabilities
+[X] Persisted assigned agent identity
+[X] Persistent project state snapshot
+[X] Intent-to-project-state propagation
+[X] Task graph planning API
+[X] Project state API
+[X] Workflow creation from a task graph
+[X] Runtime enforcement of task dependencies
+[X] Workflow execution through the assigned agent contract
+[X] Graph/project state lifecycle updates
+[X] Agent registry synchronization into PostgreSQL
+[X] PostgreSQL migration 0005
+[X] Planner unit tests
+~~~
+
+## New execution path
+
+~~~text
+Natural Language Intent
+        ↓
+Intent Compiler
+        ↓
+IntentRepresentation
+        ↓
+Capability Resolution
+        ↓
+Agent Assignment
+        ↓
+Task Graph
+        ↓
+Dependencies
+        ↓
+Project State
+        ↓
+Workflow
+        ↓
+Assigned Agent Runtime
+~~~
+
+## Task graph
+
+A task graph is now a durable versioned project object.
+
+Each graph stores:
+
+~~~text
+project
+source intent
+version
+objective
+status
+planner snapshot
+created timestamp
+~~~
+
+Each graph task stores:
+
+~~~text
+task key
+position
+objective
+required capabilities
+risk level
+approval requirement
+assigned agent
+dependencies
+execution status
+~~~
+
+Dependencies reuse the existing task dependency relation so the execution graph remains explicit rather than encoded only in prompts.
+
+## Capability resolution
+
+The planner now distinguishes:
+
+~~~text
+requested capability
+registered capability
+missing capability
+compatible agent
+risk ceiling
+~~~
+
+Unknown capabilities block planning instead of silently creating an incompatible task.
+
+Agent assignment is deterministic and risk-aware.
+
+## Project state
+
+A project now has a durable state record separate from the project aggregate.
+
+The state tracks:
+
+~~~text
+status
+phase
+version
+latest intent
+latest task graph
+objective
+unknowns
+constraints
+risks
+assigned agents
+~~~
+
+This creates a stable control-plane representation for future dashboards, approvals, resumability and project-level policy.
+
+## Workflow integration
+
+A workflow may now reference a task graph directly.
+
+When executing a planned graph:
+
+~~~text
+graph status → RUNNING
+project state → EXECUTION
+task dependency gate → enforced
+task owner → resolved from persisted agent
+agent runtime → executed with assigned contract
+task graph → COMPLETED / FAILED
+project state → COMPLETED / EXECUTION_FAILED
+~~~
+
+A task with an incomplete dependency is blocked instead of being executed out of order.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] automatic graph replanning from runtime evidence
+[ ] parallel dependency scheduling
+[ ] graph branching / conditional nodes
+[ ] capability version compatibility
+[ ] agent load / concurrency aware assignment
+[ ] planner evaluation and repair
+[ ] human approval checkpoints in the graph
+[ ] graph diff and impact analysis
+[ ] semantic project-state retrieval
+[ ] project-level budget allocation
+~~~
+
+## New architectural decisions
+
+~~~text
+DEC-083
+Compiled intent is the source contract for task planning.
+
+DEC-084
+Task graphs are durable, versioned execution plans rather than transient
+planner output.
+
+DEC-085
+Capabilities are resolved before task creation; unknown capabilities block
+planning.
+
+DEC-086
+Agent assignment is persisted on each task and execution uses the
+assigned contract.
+
+DEC-087
+Task dependencies are enforced at runtime, not only represented in the
+planner.
+
+DEC-088
+Project state is a durable control-plane object separate from the
+project aggregate.
+
+DEC-089
+A task graph may be replanned into a new version without mutating the
+historical graph definition.
+
+DEC-090
+Workflow execution may reference a task graph directly, preserving the
+intent → plan → execution lineage.
+
+## Next phase
+
+~~~text
+TITAN PLANNER INTELLIGENCE + WORKFLOW ORCHESTRATION
+~~~
+
+The next layer should make planning adaptive:
+
+~~~text
+Task Graph
+   ↓
+Dependency-aware Scheduling
+   ↓
+Agent Capacity / Quality / Cost
+   ↓
+Parallel Execution
+   ↓
+Live Evidence
+   ↓
+Evaluation
+   ↓
+Graph Repair / Replanning
+   ↓
+Project State Update
+~~~
+
+---
+
+# END OF TASK GRAPH + PROJECT STATE FOUNDATION CHECKPOINT
