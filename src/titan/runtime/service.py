@@ -1,3 +1,4 @@
+from pathlib import Path
 from time import perf_counter
 
 from titan.config import settings
@@ -11,7 +12,32 @@ from titan.runtime.contracts import (
 from titan.runtime.evaluation import evaluate_execution
 from titan.runtime.policies import RuntimePolicy
 from titan.runtime.providers import ModelRequest, build_default_provider_router
-from titan.runtime.tools import build_default_tool_registry
+from titan.runtime.sandbox import DockerSandbox, SandboxPolicy
+from titan.runtime.tools import (
+    ToolCall,
+    ToolExecutionContext,
+    ToolExecutionResult,
+    ToolExecutor,
+    build_default_tool_registry,
+)
+
+
+ENGINEERING_AGENT = AgentContract(
+    name="engineering-executor",
+    role="Engineering Task Executor",
+    instructions=(
+        "Inspect the assigned engineering task, use only explicitly allowed tools, "
+        "and return structured evidence of the work performed."
+    ),
+    capabilities=("analysis", "structured-output", "artifact-write"),
+    allowed_tools=("sandbox.exec",),
+    risk_ceiling="R2",
+    model=(
+        "openai:" + settings.openai_model
+        if settings.model_provider == "openai" and settings.openai_api_key
+        else "local"
+    ),
+)
 
 
 GENERAL_AGENT = AgentContract(
@@ -57,15 +83,62 @@ class AgentRuntime:
         tools=None,
         policy: RuntimePolicy | None = None,
     ) -> None:
-        self.contracts = contracts or AgentContractRegistry((GENERAL_AGENT,))
+        self.contracts = contracts or AgentContractRegistry((GENERAL_AGENT, ENGINEERING_AGENT))
         self.capabilities = capabilities or build_default_capability_registry()
         self.providers = providers or build_default_provider_router(
             openai_api_key=settings.openai_api_key,
             openai_model=settings.openai_model,
             openai_base_url=settings.openai_base_url,
         )
-        self.tools = tools or build_default_tool_registry()
         self.policy = policy or RuntimePolicy()
+        self.tools = tools or build_default_tool_registry(
+            sandbox=DockerSandbox(
+                SandboxPolicy(
+                    image=settings.sandbox_image,
+                    network=settings.sandbox_network,
+                    memory=settings.sandbox_memory,
+                    cpus=settings.sandbox_cpus,
+                    pids_limit=settings.sandbox_pids_limit,
+                    timeout_seconds=settings.sandbox_timeout_seconds,
+                )
+            )
+        )
+        self.tool_executor = ToolExecutor(self.tools, policy=self.policy)
+
+
+    async def execute_tool(
+        self,
+        call: ToolCall,
+        context: AgentTaskContext,
+        workspace: Path,
+        *,
+        agent_name: str = "general-executor",
+    ) -> ToolExecutionResult:
+        contract = self.contracts.resolve(agent_name)
+        capabilities = self.capabilities.resolve_many(contract.capabilities)
+        decision = self.policy.check(
+            task_risk=context.risk_level,
+            agent_risk_ceiling=contract.risk_ceiling,
+            requested_capabilities=contract.capabilities,
+            requested_tools=contract.allowed_tools,
+            registered_capabilities=tuple(item.name for item in capabilities),
+            allowed_tools=contract.allowed_tools,
+        )
+        if not decision.allowed:
+            raise PermissionError(decision.reason)
+
+        return await self.tool_executor.execute(
+            call,
+            ToolExecutionContext(
+                task_id=context.task_id,
+                run_id=context.run_id,
+                project_id=context.project_id,
+                task_risk=context.risk_level,
+                agent_risk_ceiling=contract.risk_ceiling,
+                workspace=workspace.resolve(),
+            ),
+            allowed_tools=contract.allowed_tools,
+        )
 
     async def execute(
         self,

@@ -7186,3 +7186,182 @@ Evaluation
 ---
 
 # END OF AGENT RUNTIME FOUNDATION CHECKPOINT
+
+
+---
+
+# 208. TITAN TOOL + SANDBOX FOUNDATION CHECKPOINT — 2026-09-22
+
+## Status
+
+The first governed Tool Execution and Sandbox layer is now implemented.
+
+Implemented:
+
+~~~text
+[X] Tool call contract
+[X] Tool execution context
+[X] Tool registry validation
+[X] Tool allowlist enforcement
+[X] Tool risk enforcement
+[X] Governed ToolExecutor
+[X] Docker sandbox adapter
+[X] Deny-by-default network
+[X] CPU / memory / PID limits
+[X] Capability dropping
+[X] no-new-privileges
+[X] Read-only sandbox root filesystem
+[X] Isolated /tmp
+[X] Workspace bind mount
+[X] Sandbox timeout
+[X] Engineering agent contract with sandbox.exec permission
+[X] Unit tests for tool policy and sandbox command hardening
+~~~
+
+## Tool runtime path
+
+~~~text
+Agent Contract
+      ↓
+Allowed Tool List
+      ↓
+Tool Registry
+      ↓
+Tool Risk Policy
+      ↓
+Tool Executor
+      ↓
+Tool Handler
+      ↓
+Sandbox (when required)
+      ↓
+Tool Result
+~~~
+
+## Sandbox boundary
+
+The first sandbox implementation uses Docker as the execution isolation provider.
+
+Default sandbox constraints:
+
+~~~text
+network = none
+memory = 512m
+cpus = 1.0
+pids = 128
+capabilities = dropped
+no-new-privileges = true
+root filesystem = read-only
+/tmp = isolated tmpfs
+workspace = explicit bind mount
+execution timeout = 60s
+~~~
+
+The command is passed as an explicit argv vector rather than through a shell.
+
+The sandbox therefore does not provide a generic host shell. It provides a controlled container execution boundary.
+
+## Tool policy
+
+A tool call is permitted only when:
+
+~~~text
+tool is registered
+tool is explicitly allowed by the agent contract
+tool risk <= task risk
+tool risk <= agent risk ceiling
+tool has an execution handler
+~~~
+
+Policy rejection occurs before the handler executes.
+
+## Engineering agent
+
+The first specialized runtime contract is now:
+
+~~~text
+engineering-executor
+~~~
+
+It may use:
+
+~~~text
+sandbox.exec
+~~~
+
+with an R2 risk ceiling.
+
+The general R1 agent remains restricted and cannot invoke sandbox execution.
+
+## Important implementation boundary
+
+This layer deliberately does not yet implement:
+
+~~~text
+[ ] model-generated tool-call loop
+[ ] persistent tool catalogue
+[ ] MCP tool adapter
+[ ] workspace lifecycle manager
+[ ] GitHub workspace provisioning
+[ ] credential injection broker
+[ ] outbound network policy profiles
+[ ] sandbox image registry / allowlist persistence
+[ ] sandbox artifact streaming
+[ ] tool-call event persistence
+~~~
+
+Those remain subsequent runtime layers.
+
+## New architectural decisions
+
+~~~text
+DEC-043
+Tool execution is isolated behind ToolExecutor rather than being performed
+directly by AgentRuntime or provider adapters.
+
+DEC-044
+Every tool has an explicit risk level and must pass both task-risk and
+agent-risk checks.
+
+DEC-045
+Tool permissions are allowlisted by agent contract.
+
+DEC-046
+Sandbox commands use argv execution without a host shell.
+
+DEC-047
+The initial sandbox uses Docker with network disabled and container
+privilege reduction enabled.
+
+DEC-048
+The engineering agent is the first contract allowed to use sandbox.exec;
+the general agent remains tool-restricted.
+~~~
+
+## Next phase
+
+~~~text
+TITAN WORKSPACE + MCP FOUNDATION
+~~~
+
+The next layer must connect governed tools to real project workspaces and external systems:
+
+~~~text
+Project
+  ↓
+Workspace Manager
+  ↓
+Repository / Files
+  ↓
+MCP / Native Adapters
+  ↓
+Tool Execution
+  ↓
+Sandbox
+  ↓
+Artifact
+~~~
+
+---
+
+# END OF TOOL + SANDBOX FOUNDATION CHECKPOINT
