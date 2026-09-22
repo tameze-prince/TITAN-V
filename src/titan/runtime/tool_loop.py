@@ -84,7 +84,7 @@ class AgentToolLoop:
                 "type": "function",
                 "name": tool.name,
                 "description": tool.description,
-                "strict": True,
+                "strict": tool.strict,
                 "parameters": tool.input_schema,
             }
             for tool in tools
