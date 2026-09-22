@@ -7365,3 +7365,194 @@ Artifact
 ---
 
 # END OF TOOL + SANDBOX FOUNDATION CHECKPOINT
+
+---
+
+# 209. TITAN WORKSPACE + MCP FOUNDATION CHECKPOINT — 2026-09-22
+
+## Status
+
+The first workspace isolation and MCP integration boundary is now implemented.
+
+Implemented:
+
+~~~text
+[X] Task workspace manager
+[X] UUID-scoped workspace layout
+[X] Workspace root confinement
+[X] Symlink escape checks
+[X] Workspace metadata marker
+[X] workspace.read_text tool
+[X] workspace.list tool
+[X] Workspace path traversal protection
+[X] MCP server configuration contract
+[X] MCP remote tool discovery
+[X] MCP remote tool allowlisting
+[X] MCP remote tool registration into ToolRegistry
+[X] MCP tool execution adapter
+[X] Official MCP Python SDK v2 dependency
+[X] Unit tests for workspace and MCP registration
+~~~
+
+## Workspace layout
+
+~~~text
+.titan/workspaces/
+  <project UUID>/
+    <task UUID>/
+      .titan-workspace.json
+      repository/
+      generated/
+      reports/
+~~~
+
+The current manager creates the isolated task root. Repository checkout and lifecycle orchestration are separate responsibilities.
+
+## Workspace security
+
+A workspace operation is allowed only when its resolved path remains under the task workspace.
+
+The manager rejects:
+
+~~~text
+invalid project/task identifiers
+path traversal
+resolved paths escaping the configured root
+resolved task paths escaping the project workspace
+metadata symlink escapes
+~~~
+
+Workspace tools do not accept arbitrary absolute paths.
+
+## MCP boundary
+
+TITAN now has a provider-neutral MCP adapter:
+
+~~~text
+MCPServerConfig
+      ↓
+MCPToolProvider
+      ↓
+discover remote tools
+      ↓
+explicit allowlist
+      ↓
+ToolRegistry
+      ↓
+ToolExecutor
+      ↓
+MCP call
+~~~
+
+The adapter currently targets MCP servers exposed through the official Python SDK client interface.
+
+Remote MCP tools are not automatically trusted.
+
+A server may expose many tools, but TITAN registers only tools explicitly permitted by its server configuration.
+
+Each registered MCP tool receives a local TITAN risk level before it reaches ToolExecutor.
+
+## Current MCP implementation
+
+The repository depends on the MCP Python SDK v2 line.
+
+The adapter supports:
+
+~~~text
+list_tools()
+call_tool()
+structured content
+content fallback
+is_error propagation
+~~~
+
+The next MCP layer must add:
+
+~~~text
+[ ] server credential broker integration
+[ ] server-level network policy
+[ ] stdio lifecycle manager
+[ ] MCP server health state
+[ ] tool schema persistence
+[ ] tool version tracking
+[ ] MCP event/audit records
+~~~
+
+## Runtime path after this phase
+
+~~~text
+Task
+ ↓
+Workspace Manager
+ ↓
+Tool Registry
+ ├── native workspace tools
+ ├── sandbox tools
+ └── MCP tools
+ ↓
+Risk / Permission Policy
+ ↓
+Tool Executor
+ ↓
+Sandbox / MCP
+ ↓
+Tool Result
+ ↓
+Agent Runtime
+~~~
+
+## New architectural decisions
+
+~~~text
+DEC-049
+Each task receives a UUID-scoped workspace under a configurable TITAN
+workspace root.
+
+DEC-050
+Workspace paths are resolved before access and must remain inside the
+task workspace.
+
+DEC-051
+Workspace tools are first-class governed tools rather than direct
+filesystem calls from agents.
+
+DEC-052
+MCP servers are integrated through a provider adapter instead of
+coupling AgentRuntime to the MCP SDK.
+
+DEC-053
+Remote MCP tools require explicit server-side tool allowlisting before
+registration in ToolRegistry.
+
+DEC-054
+MCP remote tools receive TITAN risk levels before execution and remain
+subject to the same ToolExecutor policy as native tools.
+~~~
+
+## Next phase
+
+~~~text
+TITAN TOOL-CALL LOOP + CONTEXT ENGINE
+~~~
+
+The current model provider still returns one structured result.
+
+The next runtime step is to let an agent reason over:
+
+~~~text
+task context
+workspace state
+available tools
+tool schemas
+previous tool results
+artifacts
+policy constraints
+memory references
+~~~
+
+and iteratively produce governed tool calls until the task reaches a
+validated terminal state.
+
+---
+
+# END OF WORKSPACE + MCP FOUNDATION CHECKPOINT

@@ -20,6 +20,7 @@ from titan.runtime.tools import (
     ToolExecutor,
     build_default_tool_registry,
 )
+from titan.runtime.workspace import WorkspaceManager
 
 
 ENGINEERING_AGENT = AgentContract(
@@ -104,13 +105,14 @@ class AgentRuntime:
             )
         )
         self.tool_executor = ToolExecutor(self.tools, policy=self.policy)
+        self.workspace_manager = WorkspaceManager(settings.workspace_root)
 
 
     async def execute_tool(
         self,
         call: ToolCall,
         context: AgentTaskContext,
-        workspace: Path,
+        workspace: Path | None = None,
         *,
         agent_name: str = "general-executor",
     ) -> ToolExecutionResult:
@@ -127,6 +129,15 @@ class AgentRuntime:
         if not decision.allowed:
             raise PermissionError(decision.reason)
 
+        resolved_workspace = (
+            workspace.resolve()
+            if workspace is not None
+            else self.workspace_manager.ensure(
+                context.project_id,
+                context.task_id,
+            ).root
+        )
+
         return await self.tool_executor.execute(
             call,
             ToolExecutionContext(
@@ -135,7 +146,7 @@ class AgentRuntime:
                 project_id=context.project_id,
                 task_risk=context.risk_level,
                 agent_risk_ceiling=contract.risk_ceiling,
-                workspace=workspace.resolve(),
+                workspace=resolved_workspace,
             ),
             allowed_tools=contract.allowed_tools,
         )

@@ -134,6 +134,52 @@ def build_default_tool_registry(
             "duration_ms": result.duration_ms,
         }
 
+    async def workspace_read_text(
+        context: ToolExecutionContext,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        path = _resolve_workspace_path(context.workspace, arguments.get("path"))
+        if not path.is_file():
+            raise ValueError(f"Workspace file does not exist: {arguments.get('path')}")
+        if path.stat().st_size > 2_000_000:
+            raise ValueError("Workspace file exceeds the 2 MB read limit")
+        return {"path": str(path.relative_to(context.workspace)), "content": path.read_text(encoding="utf-8")}
+
+    async def workspace_list(
+        context: ToolExecutionContext,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        directory = _resolve_workspace_path(context.workspace, arguments.get("path", "."))
+        if not directory.is_dir():
+            raise ValueError(f"Workspace directory does not exist: {arguments.get('path')}")
+        entries = sorted(
+            (
+                {
+                    "name": entry.name,
+                    "type": "directory" if entry.is_dir() else "file",
+                }
+                for entry in directory.iterdir()
+            ),
+            key=lambda item: (item["type"], item["name"].lower()),
+        )
+        return {"path": str(directory.relative_to(context.workspace)), "entries": entries}
+
+    registry.register(
+        ToolDefinition(
+            name="workspace.read_text",
+            description="Read a UTF-8 text file inside the explicit task workspace.",
+            risk_level="R1",
+            handler=workspace_read_text,
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="workspace.list",
+            description="List entries inside the explicit task workspace.",
+            risk_level="R1",
+            handler=workspace_list,
+        )
+    )
     registry.register(
         ToolDefinition(
             name="sandbox.exec",
@@ -146,3 +192,14 @@ def build_default_tool_registry(
         )
     )
     return registry
+
+
+def _resolve_workspace_path(workspace: Path, relative_path: Any) -> Path:
+    if not isinstance(relative_path, str) or not relative_path or "\x00" in relative_path:
+        raise ValueError("Workspace path must be a non-empty string")
+
+    root = workspace.resolve()
+    candidate = (root / relative_path).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise PermissionError("Workspace path escapes the task workspace")
+    return candidate

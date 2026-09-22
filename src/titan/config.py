@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     sandbox_cpus: str = "1.0"
     sandbox_pids_limit: int = 128
     sandbox_timeout_seconds: int = 60
+    workspace_root: str = ".titan/workspaces"
 
     model_config = SettingsConfigDict(
         env_prefix="TITAN_",
