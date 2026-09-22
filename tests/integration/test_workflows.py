@@ -107,7 +107,6 @@ async def test_create_and_start_workflow_persists_graph() -> None:
         assert any(event.type == "WorkflowExecutionRequested" for event in events)
 
         await session.delete(workflow)
-        await session.delete(project_id) if False else None
         project = await session.scalar(
             select(ProjectModel).where(ProjectModel.id == project_id)
         )
