@@ -39,6 +39,11 @@ class MCPToolProvider:
                         "name": f"mcp.{self.config.name}.{tool.name}",
                         "remote_name": tool.name,
                         "description": getattr(tool, "description", "") or "",
+                        "input_schema": getattr(tool, "inputSchema", None) or {
+                            "type": "object",
+                            "properties": {},
+                            "additionalProperties": True,
+                        },
                     }
                 )
             return tuple(tools)
@@ -60,6 +65,7 @@ class MCPToolProvider:
                     description=remote["description"] or f"MCP tool {remote['remote_name']}",
                     risk_level=self.config.default_risk,
                     handler=handler,
+                    input_schema=remote["input_schema"],
                 )
             )
             registered.append(name)
