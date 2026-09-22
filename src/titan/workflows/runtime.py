@@ -1,6 +1,4 @@
 from datetime import timedelta
-from uuid import UUID
-
 from temporalio import workflow
 
 from titan.workflows.contracts import WorkflowInput, WorkflowResult
@@ -21,7 +19,7 @@ class TitanWorkflow:
         temporal_workflow_id = workflow.info().workflow_id
         temporal_run_id = workflow.info().run_id
 
-        run_id: UUID = await workflow.execute_activity(
+        run_id: str = await workflow.execute_activity(
             mark_workflow_started,
             request.workflow_id,
             temporal_workflow_id,
@@ -29,7 +27,7 @@ class TitanWorkflow:
             start_to_close_timeout=timedelta(seconds=30),
         )
 
-        completed_task_ids: list[UUID] = []
+        completed_task_ids: list[str] = []
 
         try:
             for task_id in request.task_ids:
