@@ -5,7 +5,9 @@ from sqlalchemy import select
 from temporalio import activity
 
 from titan.persistence.database import SessionFactory
-from titan.persistence.models import EventModel, RunModel, TaskModel, WorkflowModel
+from titan.persistence.models import ArtifactModel, EventModel, RunModel, TaskModel, WorkflowModel
+from titan.runtime.contracts import AgentTaskContext
+from titan.runtime.service import get_agent_runtime
 
 
 @activity.defn
@@ -75,6 +77,9 @@ async def orchestrate_task(
         if task.workflow_id != workflow_uuid:
             raise ValueError(f"Task {task_id} does not belong to workflow {workflow_id}")
 
+        if task.status == "COMPLETED":
+            return True
+
         task.status = "RUNNING"
         session.add(
             EventModel(
@@ -83,26 +88,94 @@ async def orchestrate_task(
                 actor_type="SYSTEM",
                 aggregate_type="TASK",
                 aggregate_id=task.id,
-                payload={"run_id": run_id},
+                payload={"run_id": run_id, "execution_mode": "agent-runtime"},
             )
         )
         await session.flush()
 
-        # Orchestration seam for the future Agent Runtime.
-        task.status = "COMPLETED"
-        session.add(
-            EventModel(
-                project_id=task.project_id,
-                type="TaskCompleted",
-                actor_type="SYSTEM",
-                aggregate_type="TASK",
-                aggregate_id=task.id,
-                payload={"run_id": run_id},
-            )
+        runtime = get_agent_runtime()
+        context = AgentTaskContext(
+            task_id=task_id,
+            run_id=run_id,
+            project_id=str(task.project_id),
+            title=task.title,
+            objective=task.objective,
+            risk_level=task.risk_level,
         )
-        await session.commit()
 
-        return True
+        try:
+            execution = await runtime.execute(context)
+
+            artifact = ArtifactModel(
+                project_id=task.project_id,
+                type="AGENT_RESULT",
+                title=f"{task.title} — agent result",
+                status="FINAL",
+                media_type="application/json",
+                content_ref=execution.model_dump_json(),
+            )
+            session.add(artifact)
+
+            task.status = "COMPLETED"
+            session.add(
+                EventModel(
+                    project_id=task.project_id,
+                    type="AgentEvaluated",
+                    actor_type="SYSTEM",
+                    aggregate_type="TASK",
+                    aggregate_id=task.id,
+                    payload=execution.evaluation,
+                )
+            )
+            session.add(
+                EventModel(
+                    project_id=task.project_id,
+                    type="ArtifactCreated",
+                    actor_type="SYSTEM",
+                    aggregate_type="ARTIFACT",
+                    aggregate_id=artifact.id,
+                    payload={
+                        "task_id": task_id,
+                        "artifact_type": artifact.type,
+                        "checksum_pending": True,
+                    },
+                )
+            )
+            session.add(
+                EventModel(
+                    project_id=task.project_id,
+                    type="TaskCompleted",
+                    actor_type="SYSTEM",
+                    aggregate_type="TASK",
+                    aggregate_id=task.id,
+                    payload={
+                        "run_id": run_id,
+                        "agent_name": execution.agent_name,
+                        "provider": execution.provider,
+                        "model": execution.model,
+                    },
+                )
+            )
+            await session.commit()
+            return True
+        except Exception as exc:
+            task.status = "FAILED"
+            session.add(
+                EventModel(
+                    project_id=task.project_id,
+                    type="TaskFailed",
+                    actor_type="SYSTEM",
+                    aggregate_type="TASK",
+                    aggregate_id=task.id,
+                    payload={
+                        "run_id": run_id,
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc),
+                    },
+                )
+            )
+            await session.commit()
+            raise
 
 
 @activity.defn
