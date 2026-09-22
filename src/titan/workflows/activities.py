@@ -224,6 +224,21 @@ async def orchestrate_task(
             session.add(
                 EventModel(
                     project_id=task.project_id,
+                    type="ModelUsageRecorded",
+                    actor_type="SYSTEM",
+                    aggregate_type="TASK",
+                    aggregate_id=task.id,
+                    payload={
+                        "run_id": run_id,
+                        "provider": execution.provider,
+                        "model": execution.model,
+                        "usage": execution.usage,
+                    },
+                )
+            )
+            session.add(
+                EventModel(
+                    project_id=task.project_id,
                     type="ArtifactCreated",
                     actor_type="SYSTEM",
                     aggregate_type="ARTIFACT",

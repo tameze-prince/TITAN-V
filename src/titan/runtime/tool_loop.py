@@ -24,6 +24,7 @@ class ModelToolTurn:
     response_id: str | None
     text: str
     tool_calls: tuple[ModelToolCall, ...] = ()
+    usage: dict[str, Any] = field(default_factory=dict)
 
 
 class ToolAwareModelProvider(Protocol):
@@ -49,6 +50,7 @@ class ToolLoopResult:
     final_text: str
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     tool_results: list[dict[str, Any]] = field(default_factory=list)
+    usage: dict[str, Any] = field(default_factory=dict)
 
 
 class AgentToolLoop:
@@ -98,6 +100,7 @@ class AgentToolLoop:
         history: list[dict[str, Any]] = []
         final_text = ""
         tool_call_count = 0
+        usage: dict[str, Any] = {}
 
         for step in range(self.policy.max_steps):
             turn = await provider.generate_tool_turn(
@@ -108,12 +111,17 @@ class AgentToolLoop:
             )
             final_text = turn.text or final_text
             previous_response_id = turn.response_id
+            usage = {
+                **usage,
+                **turn.usage,
+            }
 
             if not turn.tool_calls:
                 return ToolLoopResult(
                     final_text=final_text,
                     tool_calls=history,
                     tool_results=[item for item in history if item["kind"] == "tool_result"],
+                    usage=usage,
                 )
 
             tool_call_count += len(turn.tool_calls)

@@ -83,6 +83,7 @@ class LocalStructuredProvider(ModelProvider):
             text=f"Local tool-loop execution completed for: "
             f"{user_prompt if isinstance(user_prompt, str) else 'tool results'}",
             tool_calls=(),
+            usage={"mode": "deterministic"},
         )
 
 
@@ -182,10 +183,15 @@ class OpenAIResponsesProvider(ModelProvider):
                 )
             )
 
+        usage = {}
+        if response.usage is not None:
+            usage = response.usage.model_dump(mode="json")
+
         return ModelToolTurn(
             response_id=response.id,
             text=response.output_text or "",
             tool_calls=tuple(tool_calls),
+            usage=usage,
         )
 
 

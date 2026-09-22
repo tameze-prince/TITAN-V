@@ -8206,3 +8206,181 @@ Memory / Evaluation
 ---
 
 # END OF DURABLE REPAIR LOOP CHECKPOINT
+
+---
+
+# 213. TITAN MODEL ROUTER + COST GOVERNANCE CHECKPOINT — 2026-09-22
+
+## Status
+
+The first governed model routing and usage-budget layer is now implemented.
+
+Implemented:
+
+~~~text
+[X] Provider-aware model routes
+[X] Quality tiers
+[X] Preferred-model routing
+[X] Dynamic routing for injected/custom providers
+[X] Input-token budget
+[X] Output-token budget
+[X] Optional cost budget
+[X] Configurable model cost rates
+[X] Post-execution usage enforcement
+[X] Tool-loop token usage propagation
+[X] Durable ModelUsageRecorded event
+[X] Model routing tests
+~~~
+
+## Routing path
+
+~~~text
+Agent Contract
+      ↓
+Minimum Quality Tier
+      ↓
+Preferred Model
+      ↓
+ModelRouter
+      ↓
+Provider
+      ↓
+Execution
+      ↓
+Usage
+      ↓
+Budget Enforcement
+      ↓
+Audit Event
+~~~
+
+## Quality tiers
+
+Routes expose a numerical quality tier.
+
+The current baseline provides:
+
+~~~text
+local       → tier 1
+OpenAI      → tier 2 when configured
+~~~
+
+The tier is intentionally abstract.
+
+TITAN does not equate a specific vendor/model with a permanent quality ranking. The router only uses the configured tier supplied by the deployment.
+
+## Budget controls
+
+The runtime now supports:
+
+~~~text
+max_input_tokens
+max_output_tokens
+max_cost
+~~~
+
+A zero cost budget means no cost ceiling is applied.
+
+Cost rates remain deployment configuration rather than hard-coded assumptions because provider pricing changes independently of TITAN.
+
+## Usage normalization
+
+Provider usage is normalized into:
+
+~~~text
+input_tokens
+output_tokens
+estimated_cost
+route
+quality_tier
+~~~
+
+The same normalized structure is used by the runtime and durable execution audit events.
+
+## Tool-call usage
+
+OpenAI Responses tool calls now propagate provider-reported usage through:
+
+~~~text
+ModelToolTurn
+ ↓
+AgentToolLoop
+ ↓
+AgentRuntime
+ ↓
+ModelUsageRecorded
+~~~
+
+This prevents tool-enabled agents from bypassing usage governance.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] real-time budget reservation
+[ ] per-project aggregate budgets
+[ ] per-user budgets
+[ ] model latency routing
+[ ] reliability-aware fallback
+[ ] quality/cost historical optimization
+[ ] token forecasting before execution
+[ ] provider outage circuit breaker
+[ ] persistent model route configuration
+[ ] usage dashboards
+~~~
+
+## New architectural decisions
+
+~~~text
+DEC-072
+Model selection is owned by ModelRouter rather than direct provider
+selection inside AgentRuntime.
+
+DEC-073
+Model routes expose deployment-configured quality tiers instead of
+hard-coded global model rankings.
+
+DEC-074
+Token and optional cost budgets are enforced after usage normalization.
+
+DEC-075
+Provider pricing is configuration data, not embedded business logic.
+
+DEC-076
+Model usage is persisted as a durable ModelUsageRecorded event.
+
+DEC-077
+Tool-enabled agent usage is subject to the same model governance as
+single-turn execution.
+~~~
+
+## Next phase
+
+~~~text
+TITAN PROJECT STATE + INTENT COMPILER FOUNDATION
+~~~
+
+The runtime can now execute, use tools, remember, evaluate, repair and
+govern model usage.
+
+The next missing core capability is turning user intent into the structured
+state that drives all of those subsystems:
+
+~~~text
+Natural Language Intent
+        ↓
+Intent Representation
+        ↓
+Unknowns / Risks / Constraints
+        ↓
+Required Capabilities
+        ↓
+Task Graph
+        ↓
+Workflow
+~~~
+
+---
+
+# END OF MODEL ROUTER + COST GOVERNANCE CHECKPOINT

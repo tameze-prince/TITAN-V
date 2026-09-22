@@ -13,6 +13,7 @@ class AgentContract(BaseModel):
     allowed_tools: tuple[str, ...] = ()
     risk_ceiling: str = Field(default="R1", pattern=r"^R[0-4]$")
     model: str = "local"
+    minimum_quality_tier: int = 1
 
 
 @dataclass(frozen=True, slots=True)
