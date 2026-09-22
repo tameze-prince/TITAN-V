@@ -195,6 +195,7 @@ async def compile_project_intent(
         status="COMPILED",
     )
     session.add(record)
+    await session.flush()
 
     if project.objective is None:
         project.objective = result.representation.desired_outcome or payload.raw_intent
