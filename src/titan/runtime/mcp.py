@@ -66,6 +66,7 @@ class MCPToolProvider:
                     risk_level=self.config.default_risk,
                     handler=handler,
                     input_schema=remote["input_schema"],
+                    strict=False,
                 )
             )
             registered.append(name)
