@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5"
     openai_base_url: str | None = None
     agent_execution_timeout_seconds: int = 120
+    sandbox_image: str = "python:3.13-slim"
+    sandbox_network: str = "none"
+    sandbox_memory: str = "512m"
+    sandbox_cpus: str = "1.0"
+    sandbox_pids_limit: int = 128
+    sandbox_timeout_seconds: int = 60
 
     model_config = SettingsConfigDict(
         env_prefix="TITAN_",
