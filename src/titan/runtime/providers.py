@@ -40,26 +40,31 @@ class LocalStructuredProvider(ModelProvider):
         request: ModelRequest,
         output_model: type[BaseModel],
     ) -> ModelResponse:
-        if output_model.__name__ != "AgentModelOutput":
-            raise TypeError("Local provider only supports AgentModelOutput")
-
         from titan.runtime.contracts import AgentModelOutput
+        from titan.runtime.intent import IntentRepresentation, local_compile_intent
 
         start = perf_counter()
-        result = AgentModelOutput(
-            summary=f"Local execution completed for: {request.user_prompt.splitlines()[0][:200]}",
-            result={
-                "provider_mode": "local",
-                "model": request.model,
-                "objective": request.metadata.get("objective", request.user_prompt),
-            },
-            artifact_markdown=(
-                "# Agent Execution\n\n"
-                f"## Objective\n{request.metadata.get('objective', request.user_prompt)}\n\n"
-                "## Summary\n"
-                "Execution was handled by the deterministic local provider.\n"
-            ),
-        )
+        if output_model is AgentModelOutput:
+            result = AgentModelOutput(
+                summary=f"Local execution completed for: {request.user_prompt.splitlines()[0][:200]}",
+                result={
+                    "provider_mode": "local",
+                    "model": request.model,
+                    "objective": request.metadata.get("objective", request.user_prompt),
+                },
+                artifact_markdown=(
+                    "# Agent Execution\n\n"
+                    f"## Objective\n{request.metadata.get('objective', request.user_prompt)}\n\n"
+                    "## Summary\n"
+                    "Execution was handled by the deterministic local provider.\n"
+                ),
+            )
+        elif output_model is IntentRepresentation:
+            result = local_compile_intent(request.metadata.get("raw_intent", request.user_prompt))
+        else:
+            raise TypeError(
+                f"Local provider does not support structured model {output_model.__name__}"
+            )
         elapsed_ms = int((perf_counter() - start) * 1000)
         return ModelResponse(
             provider=self.name,
