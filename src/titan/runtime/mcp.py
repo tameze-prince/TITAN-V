@@ -27,7 +27,7 @@ class MCPToolProvider:
         self.config = config
         self._client_factory = client_factory
 
-    async def list_remote_tools(self) -> tuple[dict[str, str], ...]:
+    async def list_remote_tools(self) -> tuple[dict[str, Any], ...]:
         async with self._client_factory(self.config.url) as client:
             result = await client.list_tools()
             tools = []
