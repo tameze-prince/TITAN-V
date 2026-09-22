@@ -26,9 +26,11 @@ class TitanWorkflow:
 
         run_id: str = await workflow.execute_activity(
             mark_workflow_started,
-            request.workflow_id,
-            temporal_workflow_id,
-            temporal_run_id,
+            args=(
+                request.workflow_id,
+                temporal_workflow_id,
+                temporal_run_id,
+            ),
             start_to_close_timeout=timedelta(seconds=30),
             retry_policy=RETRY_POLICY,
         )
@@ -39,9 +41,7 @@ class TitanWorkflow:
             for task_id in request.task_ids:
                 await workflow.execute_activity(
                     orchestrate_task,
-                    request.workflow_id,
-                    task_id,
-                    run_id,
+                    args=(request.workflow_id, task_id, run_id),
                     start_to_close_timeout=timedelta(seconds=60),
                     retry_policy=RETRY_POLICY,
                 )
@@ -49,9 +49,11 @@ class TitanWorkflow:
 
             await workflow.execute_activity(
                 mark_workflow_completed,
-                request.workflow_id,
-                run_id,
-                tuple(completed_task_ids),
+                args=(
+                    request.workflow_id,
+                    run_id,
+                    tuple(completed_task_ids),
+                ),
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=RETRY_POLICY,
             )
@@ -65,9 +67,7 @@ class TitanWorkflow:
         except Exception as exc:
             await workflow.execute_activity(
                 mark_workflow_failed,
-                request.workflow_id,
-                run_id,
-                str(exc),
+                args=(request.workflow_id, run_id, str(exc)),
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=RETRY_POLICY,
             )
