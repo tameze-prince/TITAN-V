@@ -40,11 +40,7 @@ class ToolDefinition:
     description: str
     risk_level: str = "R1"
     handler: ToolHandler | None = None
-    input_schema: dict[str, Any] = field(default_factory=lambda: {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": True,
-    })
+    input_schema: dict[str, Any] | None = None
     strict: bool = True
 
 
