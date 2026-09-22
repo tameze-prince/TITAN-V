@@ -167,12 +167,12 @@ class OpenAIResponsesProvider(ModelProvider):
             arguments_raw = getattr(item, "arguments", "{}")
             arguments = json.loads(arguments_raw)
             if not isinstance(arguments, dict):
-                raise ValueError("Model tool arguments must be a JSON object")
+                raise TypeError("Model tool arguments must be a JSON object")
 
             call_id = getattr(item, "call_id", None)
             name = getattr(item, "name", None)
             if not isinstance(call_id, str) or not isinstance(name, str):
-                raise ValueError("Model function call is missing call_id or name")
+                raise TypeError("Model function call is missing call_id or name")
 
             tool_calls.append(
                 ModelToolCall(
