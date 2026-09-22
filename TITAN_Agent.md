@@ -6974,3 +6974,215 @@ Only after this layer is operational will `orchestrate_task` be replaced by genu
 ---
 
 # END OF WORKFLOW RUNTIME IMPLEMENTATION CHECKPOINT
+
+---
+
+# 207. TITAN AGENT RUNTIME FOUNDATION CHECKPOINT — 2026-09-22
+
+## Status
+
+The first provider-neutral Agent Runtime foundation is now implemented.
+
+Implemented:
+
+~~~text
+[X] Agent contract
+[X] Capability registry
+[X] Model provider abstraction
+[X] Model routing
+[X] Tool registry
+[X] Risk / permission policy
+[X] Structured agent output
+[X] Baseline evaluator
+[X] Agent execution result
+[X] Durable AGENT_RESULT artifact creation
+[X] Artifact checksum
+[X] Runtime integration into Temporal task activity
+[X] Local deterministic provider for tests/development
+[X] OpenAI Responses provider adapter
+[X] Runtime unit tests
+~~~
+
+## Runtime path
+
+~~~text
+Temporal Task Activity
+        ↓
+AgentTaskContext
+        ↓
+Agent Contract
+        ↓
+Capability Registry
+        ↓
+Risk / Permission Policy
+        ↓
+Tool Registry
+        ↓
+Provider Router
+        ↓
+Model Provider
+        ↓
+Structured AgentModelOutput
+        ↓
+Baseline Evaluation
+        ↓
+ArtifactModel
+        ↓
+TaskCompleted
+~~~
+
+## Provider boundary
+
+The runtime owns the ModelProvider interface rather than coupling task execution to a single vendor.
+
+Current adapters:
+
+~~~text
+local
+  deterministic structured provider for development/tests
+
+openai
+  Responses API structured-output adapter
+~~~
+
+Future providers can be added without changing workflow semantics.
+
+## Agent contract
+
+The first built-in contract is:
+
+~~~text
+general-executor
+~~~
+
+It explicitly declares:
+
+~~~text
+analysis
+structured-output
+artifact-write
+~~~
+
+and currently has an R1 risk ceiling.
+
+The contract is intentionally separate from the Temporal workflow implementation.
+
+## Policy boundary
+
+Before model execution the runtime verifies:
+
+~~~text
+task risk <= agent risk ceiling
+requested capabilities are registered
+requested tools are allowed by the contract
+~~~
+
+A failed policy check stops execution before a model call.
+
+## Artifact rule
+
+Successful agent execution produces an AGENT_RESULT artifact with:
+
+~~~text
+structured JSON content
+SHA-256 checksum
+FINAL status
+~~~
+
+The checksum is persisted so artifact integrity can be checked independently from execution events.
+
+## Quality gate
+
+Every agent execution must pass the baseline evaluator:
+
+~~~text
+structured output present
+summary present
+artifact present
+~~~
+
+Failure prevents the task from reaching COMPLETED.
+
+This is an initial deterministic quality gate, not the final TITAN evaluation system.
+
+## Important implementation boundary
+
+The current Agent Runtime is intentionally small.
+
+Not yet implemented:
+
+~~~text
+[ ] persistent capability catalogue
+[ ] persistent agent contract versions
+[ ] dynamic model routing based on budget/latency/quality
+[ ] real tool execution loop
+[ ] MCP tool adapters
+[ ] sandbox execution
+[ ] approval engine integration
+[ ] independent evaluator workers
+[ ] token/cost budgets
+[ ] context retrieval / memory injection
+[ ] streaming execution events
+~~~
+
+Those capabilities are next layers, not responsibilities of the Temporal workflow itself.
+
+## New architectural decisions
+
+~~~text
+DEC-035
+Agent execution is isolated behind a provider-neutral AgentRuntime.
+
+DEC-036
+Agent contracts explicitly declare capabilities, allowed tools, model,
+and risk ceiling.
+
+DEC-037
+Policy checks occur before model provider execution.
+
+DEC-038
+Structured agent output is a mandatory runtime boundary.
+
+DEC-039
+Every successful task execution produces a durable AGENT_RESULT artifact.
+
+DEC-040
+Artifact content is checksummed with SHA-256.
+
+DEC-041
+The initial local provider is deterministic and exists to keep the
+core runtime testable without external model credentials.
+
+DEC-042
+OpenAI is implemented as an adapter, not as the domain runtime itself.
+~~~
+
+## Next phase
+
+~~~text
+TITAN TOOL + SANDBOX FOUNDATION
+~~~
+
+The next implementation must turn the current Tool Registry from a declaration-only boundary into a governed execution layer:
+
+~~~text
+Agent
+ ↓
+Tool selection
+ ↓
+Permission check
+ ↓
+Tool execution
+ ↓
+Sandbox / network policy
+ ↓
+Tool result
+ ↓
+Artifact / event
+ ↓
+Evaluation
+~~~
+
+---
+
+# END OF AGENT RUNTIME FOUNDATION CHECKPOINT
