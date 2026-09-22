@@ -2,6 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from titan.runtime.providers import ModelRequest
+
 
 class IntentRepresentation(BaseModel):
     problem: str = ""
@@ -44,17 +46,17 @@ class IntentCompiler:
             "user_context": user_context or {},
         }
         response = await self.provider.generate(
-            type("IntentRequest", (), {
-                "system_prompt": (
+            ModelRequest(
+                system_prompt=(
                     "You are TITAN's Intent Compiler. Convert the user's raw intent "
                     "into the exact structured IntentRepresentation schema. "
                     "Do not invent facts. Mark missing information as unknowns or assumptions. "
                     "Identify constraints, risks, research questions, deliverables and capabilities."
                 ),
-                "user_prompt": str(request),
-                "model": self.model,
-                "metadata": {"component": "intent-compiler"},
-            })(),
+                user_prompt=str(request),
+                model=self.model,
+                metadata={"component": "intent-compiler"},
+            ),
             IntentRepresentation,
         )
         return IntentCompileResult(
