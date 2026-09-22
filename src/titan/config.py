@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://titan:titan@localhost:5432/titan"
     temporal_target: str = "localhost:7233"
     temporal_namespace: str = "default"
+    temporal_task_queue: str = "titan-core"
     object_storage_endpoint: str = "http://localhost:9000"
     object_storage_bucket: str = "titan"
     otel_endpoint: str = "http://localhost:4317"
