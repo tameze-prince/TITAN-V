@@ -6,10 +6,19 @@ from sqlalchemy import select
 from temporalio import activity
 
 from titan.persistence.database import SessionFactory
-from titan.persistence.models import ArtifactModel, EventModel, RunModel, TaskModel, WorkflowModel
+from titan.persistence.models import (
+    ArtifactModel,
+    EvaluationModel,
+    EventModel,
+    RepairAttemptModel,
+    RunModel,
+    TaskModel,
+    WorkflowModel,
+)
 from titan.runtime.contracts import AgentTaskContext
 from titan.runtime.evaluation_service import EvaluationCheck, EvaluationEngine
 from titan.runtime.memory import MemoryStore
+from titan.runtime.repair import AgentEvaluationFailure
 from titan.runtime.service import get_agent_runtime
 
 
@@ -99,6 +108,23 @@ async def orchestrate_task(
         runtime = get_agent_runtime()
         memory_store = MemoryStore()
         evaluation_engine = EvaluationEngine()
+        latest_repair = await session.scalar(
+            select(RepairAttemptModel)
+            .join(EvaluationModel, RepairAttemptModel.evaluation_id == EvaluationModel.id)
+            .where(
+                EvaluationModel.task_id == task.id,
+                EvaluationModel.run_id == UUID(run_id),
+            )
+            .order_by(RepairAttemptModel.created_at.desc())
+        )
+        repair_inputs = {}
+        if latest_repair is not None:
+            repair_inputs = {
+                "repair_diagnosis": latest_repair.diagnosis,
+                "repair_context": latest_repair.corrective_action,
+                "repair_attempt": latest_repair.attempt,
+            }
+
         context = AgentTaskContext(
             task_id=task_id,
             run_id=run_id,
@@ -106,6 +132,7 @@ async def orchestrate_task(
             title=task.title,
             objective=task.objective,
             risk_level=task.risk_level,
+            inputs=repair_inputs,
         )
 
         try:
@@ -225,19 +252,79 @@ async def orchestrate_task(
             )
             await session.commit()
             return True
-        except Exception as exc:
-            task.status = "FAILED"
+        except AgentEvaluationFailure as exc:
+            evaluation = await evaluation_engine.persist(
+                session,
+                project_id=task.project_id,
+                task_id=task.id,
+                run_id=UUID(run_id),
+                result=evaluation_engine.evaluate(
+                    checks=tuple(
+                        EvaluationCheck(
+                            name=name,
+                            passed=passed,
+                            evidence=exc.evaluation.message,
+                        )
+                        for name, passed in exc.evaluation.checks.items()
+                    ),
+                    evaluator_type="AGENT_RUNTIME",
+                ),
+            )
+            await evaluation_engine.plan_repair(
+                session,
+                evaluation_id=evaluation.id,
+                task_id=task.id,
+                attempt=exc.plan.attempt,
+                diagnosis=exc.plan.diagnosis,
+                corrective_action=exc.plan.corrective_action,
+            )
+            await memory_store.remember(
+                session,
+                project_id=task.project_id,
+                task_id=task.id,
+                kind="REPAIR_DIAGNOSIS",
+                content=exc.plan.diagnosis,
+                importance=85,
+                source_type="EVALUATION",
+                source_id=evaluation.id,
+                metadata={"run_id": run_id, "attempt": exc.plan.attempt},
+            )
+            final_attempt = activity.info().attempt >= 3
+            task.status = "FAILED" if final_attempt else "REPAIRING"
             session.add(
                 EventModel(
                     project_id=task.project_id,
-                    type="TaskFailed",
+                    type="TaskRepairPlanned" if not final_attempt else "TaskFailed",
                     actor_type="SYSTEM",
                     aggregate_type="TASK",
                     aggregate_id=task.id,
                     payload={
                         "run_id": run_id,
+                        "attempt": exc.plan.attempt,
+                        "diagnosis": exc.plan.diagnosis,
+                        "corrective_action": exc.plan.corrective_action,
+                        "final_attempt": final_attempt,
+                    },
+                )
+            )
+            await session.commit()
+            raise
+        except Exception as exc:
+            final_attempt = activity.info().attempt >= 3
+            task.status = "FAILED" if final_attempt else "RETRYING"
+            session.add(
+                EventModel(
+                    project_id=task.project_id,
+                    type="TaskFailed" if final_attempt else "TaskRetrying",
+                    actor_type="SYSTEM",
+                    aggregate_type="TASK",
+                    aggregate_id=task.id,
+                    payload={
+                        "run_id": run_id,
+                        "attempt": activity.info().attempt,
                         "error_type": type(exc).__name__,
                         "error_message": str(exc),
+                        "final_attempt": final_attempt,
                     },
                 )
             )
