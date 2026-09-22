@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from collections.abc import Mapping
 
 
 class SandboxError(RuntimeError):
@@ -59,7 +59,7 @@ class DockerSandbox:
                 process.communicate(),
                 timeout=self.policy.timeout_seconds,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             process.kill()
             await process.wait()
             raise SandboxError(
