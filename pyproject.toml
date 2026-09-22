@@ -23,6 +23,7 @@ dev = [
   "pytest-asyncio",
   "ruff",
   "mypy",
+  "temporalio[testing]",
 ]
 
 [build-system]
