@@ -87,3 +87,9 @@ def _serialize_mcp_result(result: Any) -> dict[str, Any]:
         "content": serialized,
         "is_error": bool(getattr(result, "is_error", False)),
     }
+
+
+def build_mcp_provider(config: MCPServerConfig) -> MCPToolProvider:
+    from mcp import Client
+
+    return MCPToolProvider(config, client_factory=Client)
