@@ -1,6 +1,6 @@
 import pytest
 
-from titan.runtime.contracts import AgentTaskContext, AgentModelOutput
+from titan.runtime.contracts import AgentContract, AgentTaskContext, AgentModelOutput
 from titan.runtime.providers import LocalStructuredProvider, ModelRequest, ProviderRouter
 from titan.runtime.service import AgentRuntime
 
