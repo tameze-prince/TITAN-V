@@ -22,7 +22,11 @@ GENERAL_AGENT = AgentContract(
         "Return a concise summary, structured result data, and a useful artifact."
     ),
     capabilities=("analysis", "structured-output", "artifact-write"),
-    model="local",
+    model=(
+        "openai:" + settings.openai_model
+        if settings.model_provider == "openai" and settings.openai_api_key
+        else "local"
+    ),
     risk_ceiling="R1",
 )
 
