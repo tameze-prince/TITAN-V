@@ -36,6 +36,9 @@ packages = ["src/titan"]
 line-length = 100
 target-version = "py313"
 
+[tool.ruff.lint]
+ignore = ["I001", "B008"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
