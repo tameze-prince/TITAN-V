@@ -49,11 +49,13 @@ jobs:
       temporal:
         image: temporalio/auto-setup:latest
         env:
-          DB: postgresql
+          DB: postgres12
           DB_PORT: 5432
           POSTGRES_USER: titan
           POSTGRES_PWD: titan
           POSTGRES_SEEDS: temporal-postgres
+          TEMPORAL_ADDRESS: temporal:7233
+          TEMPORAL_CLI_ADDRESS: temporal:7233
         ports:
           - 7233:7233
 
