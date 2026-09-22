@@ -2,20 +2,47 @@ name: CI
 
 on:
   push:
-    branches: ["main", "bootstrap/**"]
+    branches: ["main", "feat/**", "fix/**", "bootstrap/**"]
   pull_request:
 
 jobs:
   python:
     runs-on: ubuntu-latest
+
+    env:
+      TITAN_DATABASE_URL: postgresql+asyncpg://titan:titan@localhost:5432/titan
+      TITAN_RUN_INTEGRATION: "1"
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: titan
+          POSTGRES_USER: titan
+          POSTGRES_PASSWORD: titan
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U titan -d titan"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
       - name: Install
         run: pip install -e ".[dev]"
+
+      - name: Database migrations
+        run: alembic upgrade head
+
       - name: Lint
         run: ruff check .
+
       - name: Tests
         run: pytest

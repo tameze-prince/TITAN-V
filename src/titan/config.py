@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
-    database_url: str
+    database_url: str = "postgresql+asyncpg://titan:titan@localhost:5432/titan"
     temporal_target: str = "localhost:7233"
     temporal_namespace: str = "default"
     object_storage_endpoint: str = "http://localhost:9000"
