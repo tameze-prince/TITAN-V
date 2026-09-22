@@ -438,17 +438,16 @@ async def mark_workflow_completed(
         run.completed_at = now
         run.metrics = {"completed_tasks": len(completed_task_ids)}
 
-        state = await session.scalar(
-            select(ProjectStateModel).where(
-                ProjectStateModel.project_id == workflow.project_id
-            )
-        )
-        if state is not None:
-            state.status = "COMPLETED"
-            state.phase = "COMPLETED"
-            state.version += 1
-
         if workflow.task_graph_id is not None:
+            state = await session.scalar(
+                select(ProjectStateModel).where(
+                    ProjectStateModel.project_id == workflow.project_id
+                )
+            )
+            if state is not None:
+                state.status = "COMPLETED"
+                state.phase = "COMPLETED"
+                state.version += 1
             task_graph = await session.scalar(
                 select(TaskGraphModel).where(
                     TaskGraphModel.id == workflow.task_graph_id
@@ -495,17 +494,16 @@ async def mark_workflow_failed(
         run.error_code = "WORKFLOW_FAILED"
         run.error_message = error_message
 
-        state = await session.scalar(
-            select(ProjectStateModel).where(
-                ProjectStateModel.project_id == workflow.project_id
-            )
-        )
-        if state is not None:
-            state.status = "FAILED"
-            state.phase = "EXECUTION_FAILED"
-            state.version += 1
-
         if workflow.task_graph_id is not None:
+            state = await session.scalar(
+                select(ProjectStateModel).where(
+                    ProjectStateModel.project_id == workflow.project_id
+                )
+            )
+            if state is not None:
+                state.status = "FAILED"
+                state.phase = "EXECUTION_FAILED"
+                state.version += 1
             task_graph = await session.scalar(
                 select(TaskGraphModel).where(
                     TaskGraphModel.id == workflow.task_graph_id
