@@ -49,11 +49,15 @@ class ProjectModel(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     objective: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE", server_default="ACTIVE")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="ACTIVE", server_default="ACTIVE"
+    )
     current_phase: Mapped[str] = mapped_column(
         String(64), nullable=False, default="DISCOVERY", server_default="DISCOVERY"
     )
-    autonomy_level: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    autonomy_level: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -86,6 +90,36 @@ class AgentModel(Base):
     tasks: Mapped[list["TaskModel"]] = relationship(back_populates="owner_agent")
 
 
+class WorkflowModel(Base):
+    __tablename__ = "workflows"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    workflow_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="GENERIC", server_default="GENERIC"
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="CREATED", server_default="CREATED"
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    temporal_workflow_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True
+    )
+    temporal_run_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    project: Mapped[ProjectModel] = relationship(back_populates="workflows")
+    tasks: Mapped[list["TaskModel"]] = relationship(back_populates="workflow")
+    runs: Mapped[list["RunModel"]] = relationship(back_populates="workflow")
+
+
 class TaskModel(Base):
     __tablename__ = "tasks"
     __table_args__ = (
@@ -98,6 +132,9 @@ class TaskModel(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    workflow_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="SET NULL"), nullable=True
     )
     owner_agent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
@@ -121,29 +158,39 @@ class TaskModel(Base):
     )
 
     project: Mapped[ProjectModel] = relationship(back_populates="tasks")
+    workflow: Mapped[WorkflowModel | None] = relationship(back_populates="tasks")
     owner_agent: Mapped[AgentModel | None] = relationship(back_populates="tasks")
+    runs: Mapped[list["RunModel"]] = relationship(back_populates="task")
 
 
-class WorkflowModel(Base):
-    __tablename__ = "workflows"
+class RunModel(Base):
+    __tablename__ = "runs"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    workflow_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    workflow_type: Mapped[str] = mapped_column(
-        String(64), nullable=False, default="GENERIC", server_default="GENERIC"
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
     )
+    temporal_workflow_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    temporal_run_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="CREATED", server_default="CREATED"
+        String(32), nullable=False, default="RUNNING", server_default="RUNNING"
     )
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
-    created_at: Mapped[datetime] = mapped_column(
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metrics: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
 
-    project: Mapped[ProjectModel] = relationship(back_populates="workflows")
+    workflow: Mapped[WorkflowModel] = relationship(back_populates="runs")
+    task: Mapped[TaskModel | None] = relationship(back_populates="runs")
 
 
 class ArtifactModel(Base):
