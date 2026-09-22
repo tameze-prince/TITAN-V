@@ -40,6 +40,11 @@ class ToolDefinition:
     description: str
     risk_level: str = "R1"
     handler: ToolHandler | None = None
+    input_schema: dict[str, Any] = field(default_factory=lambda: {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": True,
+    })
 
 
 class ToolRegistry:
@@ -170,6 +175,12 @@ def build_default_tool_registry(
             description="Read a UTF-8 text file inside the explicit task workspace.",
             risk_level="R1",
             handler=workspace_read_text,
+            input_schema={
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+                "additionalProperties": False,
+            },
         )
     )
     registry.register(
@@ -178,6 +189,11 @@ def build_default_tool_registry(
             description="List entries inside the explicit task workspace.",
             risk_level="R1",
             handler=workspace_list,
+            input_schema={
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "additionalProperties": False,
+            },
         )
     )
     registry.register(
@@ -189,6 +205,22 @@ def build_default_tool_registry(
             ),
             risk_level="R2",
             handler=sandbox_exec,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 1,
+                    },
+                    "environment": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                    },
+                },
+                "required": ["command"],
+                "additionalProperties": False,
+            },
         )
     )
     return registry
