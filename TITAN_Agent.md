@@ -6725,3 +6725,252 @@ Workflow runtime + Temporal integration
 ---
 
 # END OF PERSISTENCE IMPLEMENTATION CHECKPOINT
+
+
+---
+
+# 206. WORKFLOW RUNTIME IMPLEMENTATION CHECKPOINT — 2026-09-22
+
+## Status
+
+The first durable TITAN workflow runtime is now implemented and validated on the feature branch.
+
+Implemented:
+
+```text
+[X] Workflow persistence extension
+[X] Run persistence
+[X] Task → Workflow association
+[X] Temporal workflow definition
+[X] Temporal activities
+[X] Temporal client adapter
+[X] Workflow worker entrypoint
+[X] Workflow start API
+[X] Task creation API
+[X] Durable workflow lifecycle events
+[X] Temporal task queue configuration
+[X] Bounded activity retry policy
+[X] PostgreSQL integration validation
+[X] Real Temporal service validation in CI
+[X] Temporal workflow integration test
+[X] Async SQLAlchemy loop-isolation test fixture
+[X] Database cascade-aware ORM relationships
+```
+
+## Current runtime path
+
+```text
+POST /projects
+      ↓
+Project
+
+POST /projects/{id}/tasks
+      ↓
+Task Graph
+
+POST /projects/{id}/workflows
+      ↓
+Workflow persisted
+      ↓
+Temporal workflow started
+      ↓
+Workflow activity
+      ↓
+Task activity loop
+      ↓
+TaskStarted
+      ↓
+TaskCompleted
+      ↓
+WorkflowCompleted
+      ↓
+Workflow / Run state persisted
+```
+
+## Agent Runtime boundary
+
+`orchestrate_task` is intentionally a boundary, not the final implementation.
+
+Current behavior:
+
+```text
+Task
+ ↓
+Validate ownership
+ ↓
+RUNNING
+ ↓
+TaskStarted
+ ↓
+COMPLETED
+ ↓
+TaskCompleted
+```
+
+Future behavior:
+
+```text
+Task
+ ↓
+Capability resolution
+ ↓
+Agent selection
+ ↓
+Policy evaluation
+ ↓
+Agent Runtime
+ ↓
+Tool calls
+ ↓
+Artifacts
+ ↓
+Evaluation
+ ↓
+Task completion
+```
+
+This separation prevents workflow infrastructure from becoming tightly coupled to a specific LLM provider or agent SDK.
+
+## New architectural decisions
+
+```text
+DEC-028
+Temporal is the first durable workflow execution adapter.
+
+DEC-029
+Multiple Temporal activity arguments are passed through the SDK's
+explicit args mechanism rather than relying on multiple positional
+arguments.
+
+DEC-030
+Activity retries are explicitly bounded with a shared retry policy.
+
+DEC-031
+The CI environment validates TITAN against a real Temporal service
+rather than relying only on mocked workflow execution.
+
+DEC-032
+Async SQLAlchemy engine connections are disposed between tests to
+prevent cross-event-loop connection reuse.
+
+DEC-033
+SQLAlchemy project relationships use passive deletes where PostgreSQL
+foreign-key cascades are authoritative.
+
+DEC-034
+The configured Temporal task queue is environment-specific and is
+asserted through configuration in integration tests.
+```
+
+## Validation
+
+The validated CI sequence is:
+
+```text
+Install                  ✅
+Alembic migrations       ✅
+Temporal readiness       ✅
+Ruff                     ✅
+Unit tests               ✅
+PostgreSQL integration   ✅
+Temporal workflow test   ✅
+```
+
+## Observed and resolved failures
+
+### Failure A — Async event-loop reuse
+
+Symptom:
+
+```text
+Future attached to a different loop
+```
+
+Resolution:
+
+```text
+dispose SQLAlchemy async engine
+before and after integration tests
+```
+
+### Failure B — Temporal activity invocation
+
+Symptom:
+
+```text
+execute_activity() takes from 1 to 2 positional arguments
+```
+
+Resolution:
+
+```text
+use the SDK's args=... mechanism for multi-argument activities
+```
+
+### Failure C — Workflow test configuration
+
+Symptom:
+
+```text
+test expected titan-core
+CI configured titan-ci
+```
+
+Resolution:
+
+```text
+assert the configured task queue instead of hard-coding one environment
+```
+
+### Failure D — ORM cascade cleanup
+
+Symptom:
+
+```text
+null value in column "project_id" of relation "tasks"
+```
+
+Resolution:
+
+```text
+mark project child relationships passive_deletes=True
+and let PostgreSQL foreign-key actions own deletion semantics
+```
+
+## Next implementation phase
+
+The next phase is:
+
+# TITAN AGENT RUNTIME FOUNDATION
+
+Required capabilities:
+
+```text
+Agent contract loading
+      ↓
+Capability registry
+      ↓
+Model provider abstraction
+      ↓
+Model routing
+      ↓
+Tool registry
+      ↓
+Policy check
+      ↓
+Sandbox
+      ↓
+Agent execution
+      ↓
+Structured result
+      ↓
+Artifact creation
+      ↓
+Evaluation
+```
+
+Only after this layer is operational will `orchestrate_task` be replaced by genuine agent execution.
+
+---
+
+# END OF WORKFLOW RUNTIME IMPLEMENTATION CHECKPOINT
