@@ -208,6 +208,8 @@ async def _upsert_agent_models(
                 "risk_ceiling": contract.risk_ceiling,
                 "model": contract.model,
                 "minimum_quality_tier": contract.minimum_quality_tier,
+                "max_concurrency": contract.max_concurrency,
+                "scheduling_priority": contract.scheduling_priority,
             },
         }
         for contract in contracts
