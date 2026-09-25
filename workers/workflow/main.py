@@ -35,6 +35,7 @@ async def main() -> None:
             orchestrate_task,
             mark_workflow_completed,
             mark_workflow_failed,
+            attempt_automatic_recovery,
         ],
     )
 
