@@ -1,3 +1,4 @@
+import asyncio
 from datetime import timedelta
 
 from temporalio import workflow
@@ -6,6 +7,7 @@ from temporalio.common import RetryPolicy
 from titan.workflows.contracts import WorkflowInput, WorkflowResult
 
 with workflow.unsafe.imports_passed_through():
+    from titan.runtime.scheduler import DependencyAwareScheduler
     from titan.workflows.activities import (
         mark_workflow_completed,
         mark_workflow_failed,
@@ -36,16 +38,33 @@ class TitanWorkflow:
         )
 
         completed_task_ids: list[str] = []
+        schedule = DependencyAwareScheduler().build(
+            request.task_ids,
+            request.dependencies,
+        )
 
         try:
-            for task_id in request.task_ids:
-                await workflow.execute_activity(
-                    orchestrate_task,
-                    args=(request.workflow_id, task_id, run_id),
-                    start_to_close_timeout=timedelta(seconds=60),
-                    retry_policy=RETRY_POLICY,
+            for wave in schedule.waves:
+                results = await asyncio.gather(
+                    *(
+                        workflow.execute_activity(
+                            orchestrate_task,
+                            args=(request.workflow_id, task_id, run_id),
+                            start_to_close_timeout=timedelta(seconds=60),
+                            retry_policy=RETRY_POLICY,
+                        )
+                        for task_id in wave
+                    ),
+                    return_exceptions=True,
                 )
-                completed_task_ids.append(task_id)
+                failures = [
+                    result
+                    for result in results
+                    if isinstance(result, BaseException)
+                ]
+                if failures:
+                    raise failures[0]
+                completed_task_ids.extend(wave)
 
             await workflow.execute_activity(
                 mark_workflow_completed,
@@ -62,6 +81,7 @@ class TitanWorkflow:
                 workflow_id=request.workflow_id,
                 status="COMPLETED",
                 completed_task_ids=tuple(completed_task_ids),
+                execution_waves=schedule.waves,
                 run_id=run_id,
             )
         except Exception as exc:
