@@ -28,7 +28,7 @@ from titan.runtime.model_router import ModelBudget, ModelSelectionRequest
 from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
 from titan.runtime.planning_service import persist_task_graph
 from titan.runtime.service import get_agent_runtime
-from titan.workflows.contracts import WorkflowInput
+from titan.workflows.contracts import WorkflowInput, WorkflowTaskProfile
 from titan.workflows.runtime import TitanWorkflow
 
 
@@ -683,26 +683,86 @@ async def create_and_start_workflow(
         else []
     )
     agents_by_id = {agent.id: agent for agent in agent_rows}
+    runtime = get_agent_runtime()
 
     task_agents: list[tuple[str, str]] = []
     used_agents: dict[str, int] = {}
+    task_profiles: list[WorkflowTaskProfile] = []
+
     for task in tasks:
         if task.owner_agent_id is None:
-            continue
-        agent = agents_by_id.get(task.owner_agent_id)
-        if agent is None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Assigned agent for task {task.id} is not available",
-            )
+            agent_name = "general-executor"
+            contract = runtime.contracts.resolve(agent_name)
+            metadata = {
+                "max_concurrency": contract.max_concurrency,
+                "minimum_quality_tier": contract.minimum_quality_tier,
+                "scheduling_priority": contract.scheduling_priority,
+                "model": contract.model,
+            }
+        else:
+            agent = agents_by_id.get(task.owner_agent_id)
+            if agent is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Assigned agent for task {task.id} is not available",
+                )
+            agent_name = agent.name
+            metadata = agent.metadata_json
+
         task_id = str(task.id)
-        task_agents.append((task_id, agent.name))
-        raw_capacity = agent.metadata_json.get("max_concurrency", 1)
+        task_agents.append((task_id, agent_name))
+
         try:
-            capacity = int(raw_capacity)
+            capacity = max(1, int(metadata.get("max_concurrency", 1)))
         except (TypeError, ValueError):
             capacity = 1
-        used_agents[agent.name] = max(1, capacity)
+        used_agents[agent_name] = capacity
+
+        try:
+            minimum_quality_tier = max(0, int(metadata.get("minimum_quality_tier", 1)))
+        except (TypeError, ValueError):
+            minimum_quality_tier = 1
+
+        try:
+            priority = int(metadata.get("scheduling_priority", 0))
+        except (TypeError, ValueError):
+            priority = 0
+
+        preferred_model = str(metadata.get("model") or "local")
+        provider_available = True
+        estimated_cost = 0.0
+        try:
+            selection = runtime.model_router.select(
+                ModelSelectionRequest(
+                    preferred_model=preferred_model,
+                    minimum_quality_tier=minimum_quality_tier,
+                    budget=ModelBudget(
+                        max_input_tokens=settings.model_max_input_tokens,
+                        max_output_tokens=settings.model_max_output_tokens,
+                        max_cost=0.0,
+                    ),
+                )
+            )
+            estimated_cost = runtime.model_router.estimate_cost(
+                selection.route,
+                {
+                    "input_tokens": settings.model_max_input_tokens,
+                    "output_tokens": settings.model_max_output_tokens,
+                },
+            )
+        except (KeyError, LookupError, ValueError):
+            provider_available = False
+
+        task_profiles.append(
+            WorkflowTaskProfile(
+                task_id=task_id,
+                risk_level=task.risk_level,
+                minimum_quality_tier=minimum_quality_tier,
+                estimated_cost=estimated_cost,
+                priority=priority,
+                provider_available=provider_available,
+            )
+        )
 
     request = WorkflowInput(
         workflow_id=str(workflow.id),
@@ -717,6 +777,8 @@ async def create_and_start_workflow(
         ),
         task_agents=tuple(task_agents),
         agent_capacities=tuple(sorted(used_agents.items())),
+        task_profiles=tuple(task_profiles),
+        max_project_cost=settings.orchestration_max_cost,
     )
 
     try:
@@ -762,6 +824,12 @@ async def create_and_start_workflow(
                     len(items)
                     for items in dependency_map.values()
                 ),
+                "estimated_schedule_cost": sum(
+                    profile.estimated_cost
+                    for profile in task_profiles
+                ),
+                "max_project_cost": settings.orchestration_max_cost,
+                "task_profile_count": len(task_profiles),
             },
         )
     )
