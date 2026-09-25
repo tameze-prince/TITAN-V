@@ -11,7 +11,7 @@ def test_scheduler_groups_independent_tasks_into_parallel_waves() -> None:
     scheduler = DependencyAwareScheduler()
 
     schedule = scheduler.build(
-        ("a", "b", "c", "d"),
+        ("a", "b", "c", "d", "e"),
         (
             ("c", ("a",)),
             ("d", ("b",)),
@@ -85,6 +85,7 @@ def test_scheduler_prioritizes_the_critical_path_when_capacity_is_limited() -> N
         ("a",),
         ("c",),
         ("d",),
+        ("e",),
         ("b",),
     )
 
