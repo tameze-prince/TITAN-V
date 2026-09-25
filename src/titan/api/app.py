@@ -810,6 +810,11 @@ async def create_and_start_workflow(
     task_agents: list[tuple[str, str]] = []
     used_agents: dict[str, int] = {}
     task_profiles: list[WorkflowTaskProfile] = []
+    precompleted_task_ids = tuple(
+        str(task.id)
+        for task in tasks
+        if task.status == "COMPLETED"
+    )
 
     for task in tasks:
         if task.owner_agent_id is None:
@@ -924,6 +929,7 @@ async def create_and_start_workflow(
         agent_capacities=tuple(sorted(used_agents.items())),
         task_profiles=tuple(task_profiles),
         max_project_cost=settings.orchestration_max_cost,
+        precompleted_task_ids=precompleted_task_ids,
     )
 
     try:
@@ -951,6 +957,7 @@ async def create_and_start_workflow(
                 for profile in task_profiles
             ),
             max_project_cost=settings.orchestration_max_cost,
+            precompleted_task_ids=precompleted_task_ids,
         )
     except TaskScheduleError as exc:
         for task in tasks:
