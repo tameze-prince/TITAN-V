@@ -172,7 +172,6 @@ def test_scheduler_rejects_duplicate_profiles() -> None:
         )
 
 
-
 def test_scheduler_rejects_negative_expected_duration() -> None:
     scheduler = DependencyAwareScheduler()
 
