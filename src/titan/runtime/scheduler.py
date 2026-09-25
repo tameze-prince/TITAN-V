@@ -23,30 +23,41 @@ class TaskSchedule:
 
 
 class DependencyAwareScheduler:
-    """Build deterministic parallel execution waves from a task dependency DAG."""
+    """Build deterministic execution waves from dependencies and agent capacity."""
 
     def build(
         self,
         task_ids: tuple[str, ...],
         dependencies: tuple[tuple[str, tuple[str, ...]], ...] = (),
+        *,
+        task_agents: tuple[tuple[str, str], ...] = (),
+        agent_capacities: tuple[tuple[str, int], ...] = (),
     ) -> TaskSchedule:
         unique_task_ids = self._normalize_task_ids(task_ids)
         dependency_map = self._normalize_dependencies(
             unique_task_ids,
             dependencies,
         )
+        agent_map = self._normalize_task_map(
+            unique_task_ids,
+            task_agents,
+            map_name="task agent map",
+        )
+        capacity_map = self._normalize_capacities(agent_capacities)
 
+        critical_path = self._critical_path_lengths(unique_task_ids, dependency_map)
+        position = {task_id: index for index, task_id in enumerate(unique_task_ids)}
         completed: set[str] = set()
         remaining = set(unique_task_ids)
         waves: list[tuple[str, ...]] = []
 
         while remaining:
-            ready = tuple(
+            ready = [
                 task_id
                 for task_id in unique_task_ids
                 if task_id in remaining
                 and dependency_map[task_id].issubset(completed)
-            )
+            ]
             if not ready:
                 unresolved = tuple(
                     task_id
@@ -58,9 +69,34 @@ class DependencyAwareScheduler:
                     f"unresolved tasks: {', '.join(unresolved)}"
                 )
 
-            waves.append(ready)
-            completed.update(ready)
-            remaining.difference_update(ready)
+            ready.sort(
+                key=lambda task_id: (
+                    -critical_path[task_id],
+                    position[task_id],
+                )
+            )
+
+            selected: list[str] = []
+            agent_loads: dict[str, int] = {}
+            for task_id in ready:
+                agent = agent_map.get(task_id)
+                capacity = capacity_map.get(agent) if agent is not None else None
+                if capacity is not None and agent_loads.get(agent, 0) >= capacity:
+                    continue
+
+                selected.append(task_id)
+                if agent is not None and capacity is not None:
+                    agent_loads[agent] = agent_loads.get(agent, 0) + 1
+
+            if not selected:
+                raise TaskScheduleError(
+                    "Ready tasks cannot be scheduled under the declared agent capacities"
+                )
+
+            wave = tuple(selected)
+            waves.append(wave)
+            completed.update(wave)
+            remaining.difference_update(wave)
 
         return TaskSchedule(waves=tuple(waves))
 
@@ -111,3 +147,79 @@ class DependencyAwareScheduler:
             result[task_id].update(normalized_dependencies)
 
         return result
+
+    @staticmethod
+    def _normalize_task_map(
+        task_ids: tuple[str, ...],
+        values: tuple[tuple[str, str], ...],
+        *,
+        map_name: str,
+    ) -> dict[str, str]:
+        task_set = set(task_ids)
+        result: dict[str, str] = {}
+        for task_id, agent_name in values:
+            if task_id not in task_set:
+                raise TaskScheduleError(
+                    f"{map_name} references unknown task '{task_id}'"
+                )
+            if not agent_name or not agent_name.strip():
+                raise TaskScheduleError(
+                    f"{map_name} contains an empty agent name for task '{task_id}'"
+                )
+            cleaned = agent_name.strip()
+            previous = result.get(task_id)
+            if previous is not None and previous != cleaned:
+                raise TaskScheduleError(
+                    f"{map_name} assigns multiple agents to task '{task_id}'"
+                )
+            result[task_id] = cleaned
+        return result
+
+    @staticmethod
+    def _normalize_capacities(
+        values: tuple[tuple[str, int], ...],
+    ) -> dict[str, int]:
+        result: dict[str, int] = {}
+        for agent_name, capacity in values:
+            if not agent_name or not agent_name.strip():
+                raise TaskScheduleError("Agent capacity entries require a name")
+            if capacity < 1:
+                raise TaskScheduleError(
+                    f"Agent '{agent_name}' must have a concurrency capacity of at least 1"
+                )
+            cleaned = agent_name.strip()
+            previous = result.get(cleaned)
+            if previous is not None and previous != capacity:
+                raise TaskScheduleError(
+                    f"Agent '{cleaned}' has conflicting concurrency capacities"
+                )
+            result[cleaned] = capacity
+        return result
+
+    @staticmethod
+    def _critical_path_lengths(
+        task_ids: tuple[str, ...],
+        dependency_map: dict[str, set[str]],
+    ) -> dict[str, int]:
+        dependents: dict[str, list[str]] = {task_id: [] for task_id in task_ids}
+        for task_id, dependencies in dependency_map.items():
+            for dependency in dependencies:
+                dependents[dependency].append(task_id)
+
+        memo: dict[str, int] = {}
+
+        def depth(task_id: str) -> int:
+            if task_id in memo:
+                return memo[task_id]
+            children = dependents[task_id]
+            memo[task_id] = (
+                0
+                if not children
+                else 1 + max(depth(child) for child in children)
+            )
+            return memo[task_id]
+
+        for task_id in task_ids:
+            depth(task_id)
+
+        return memo
