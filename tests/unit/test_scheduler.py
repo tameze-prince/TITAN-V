@@ -112,6 +112,7 @@ def test_scheduler_orders_ready_tasks_by_risk_quality_and_priority() -> None:
                 minimum_quality_tier=1,
                 priority=0,
                 estimated_cost=1.0,
+                expected_duration_ms=100,
             ),
             TaskSchedulingProfile(
                 task_id="high",
@@ -119,12 +120,14 @@ def test_scheduler_orders_ready_tasks_by_risk_quality_and_priority() -> None:
                 minimum_quality_tier=3,
                 priority=10,
                 estimated_cost=5.0,
+                expected_duration_ms=500,
             ),
         ),
     )
 
     assert schedule.waves == (("high",), ("low",))
     assert schedule.estimated_cost == 6.0
+    assert schedule.estimated_makespan_ms == 600
 
 
 def test_scheduler_enforces_project_cost_budget() -> None:
@@ -165,6 +168,22 @@ def test_scheduler_rejects_duplicate_profiles() -> None:
             task_profiles=(
                 TaskSchedulingProfile(task_id="a"),
                 TaskSchedulingProfile(task_id="a", priority=1),
+            ),
+        )
+
+
+
+def test_scheduler_rejects_negative_expected_duration() -> None:
+    scheduler = DependencyAwareScheduler()
+
+    with pytest.raises(TaskScheduleError, match="negative expected duration"):
+        scheduler.build(
+            ("a",),
+            task_profiles=(
+                TaskSchedulingProfile(
+                    task_id="a",
+                    expected_duration_ms=-1,
+                ),
             ),
         )
 
