@@ -146,7 +146,7 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
         task_d,
     )
     assert result.execution_waves == (
-        (task_d, task_b),
+        (task_b, task_d),
         (task_c,),
     )
     assert result.estimated_schedule_cost == 4.5
