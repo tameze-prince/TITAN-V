@@ -37,6 +37,7 @@ ENGINEERING_AGENT = AgentContract(
     capabilities=("analysis", "structured-output", "artifact-write"),
     allowed_tools=("workspace.list", "workspace.read_text", "sandbox.exec"),
     risk_ceiling="R2",
+    max_concurrency=settings.engineering_agent_max_concurrency,
     model=(
         "openai:" + settings.openai_model
         if settings.model_provider == "openai" and settings.openai_api_key
