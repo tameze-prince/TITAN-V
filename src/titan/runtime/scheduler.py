@@ -264,10 +264,15 @@ class DependencyAwareScheduler:
             task_id: TaskSchedulingProfile(task_id=task_id)
             for task_id in task_ids
         }
+        seen: set[str] = set()
         for profile in values:
             if profile.task_id not in task_set:
                 raise TaskScheduleError(
                     f"Task scheduling profile references unknown task '{profile.task_id}'"
+                )
+            if profile.task_id in seen:
+                raise TaskScheduleError(
+                    f"Task '{profile.task_id}' has multiple scheduling profiles"
                 )
             if profile.risk_level not in RISK_ORDER:
                 raise TaskScheduleError(
@@ -282,12 +287,7 @@ class DependencyAwareScheduler:
                 raise TaskScheduleError(
                     f"Task '{profile.task_id}' has a negative estimated cost"
                 )
-            if profile.task_id in values_by_task_id(result):
-                previous = result[profile.task_id]
-                if previous != TaskSchedulingProfile(task_id=profile.task_id) and previous != profile:
-                    raise TaskScheduleError(
-                        f"Task '{profile.task_id}' has multiple scheduling profiles"
-                    )
+            seen.add(profile.task_id)
             result[profile.task_id] = profile
         return result
 
@@ -326,9 +326,3 @@ class DependencyAwareScheduler:
             depth(task_id)
 
         return memo
-
-
-def values_by_task_id(
-    profiles: dict[str, TaskSchedulingProfile],
-) -> set[str]:
-    return set(profiles)
