@@ -31,7 +31,6 @@ class DependencyAwareScheduler:
         dependencies: tuple[tuple[str, tuple[str, ...]], ...] = (),
     ) -> TaskSchedule:
         unique_task_ids = self._normalize_task_ids(task_ids)
-        task_set = set(unique_task_ids)
         dependency_map = self._normalize_dependencies(
             unique_task_ids,
             dependencies,
