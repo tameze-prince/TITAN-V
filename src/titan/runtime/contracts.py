@@ -14,6 +14,8 @@ class AgentContract(BaseModel):
     risk_ceiling: str = Field(default="R1", pattern=r"^R[0-4]$")
     model: str = "local"
     minimum_quality_tier: int = 1
+    max_concurrency: int = Field(default=1, ge=1, le=64)
+    scheduling_priority: int = Field(default=0, ge=-100, le=100)
 
 
 @dataclass(frozen=True, slots=True)
