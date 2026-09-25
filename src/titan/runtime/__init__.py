@@ -15,6 +15,7 @@ __all__ = [
     "AgentRuntime",
     "CapabilityResolutionError",
     "CapabilityResolver",
+    "DependencyAwareScheduler",
     "EvaluationEngine",
     "IntentCompiler",
     "IntentRepresentation",
@@ -22,7 +23,15 @@ __all__ = [
     "TaskGraphPlan",
     "TaskGraphPlanner",
     "TaskPlanNode",
+    "TaskSchedule",
+    "TaskScheduleCycleError",
+    "TaskScheduleError",
     "Workspace",
     "WorkspaceManager",
     "get_agent_runtime",
-]
+]from titan.runtime.scheduler import (
+    DependencyAwareScheduler,
+    TaskSchedule,
+    TaskScheduleCycleError,
+    TaskScheduleError,
+)
