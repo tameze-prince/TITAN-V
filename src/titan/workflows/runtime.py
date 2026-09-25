@@ -7,7 +7,7 @@ from temporalio.common import RetryPolicy
 from titan.workflows.contracts import WorkflowInput, WorkflowResult
 
 with workflow.unsafe.imports_passed_through():
-    from titan.runtime.scheduler import DependencyAwareScheduler
+    from titan.runtime.scheduler import DependencyAwareScheduler, TaskSchedulingProfile
     from titan.workflows.activities import (
         mark_workflow_completed,
         mark_workflow_failed,
@@ -43,6 +43,18 @@ class TitanWorkflow:
             request.dependencies,
             task_agents=request.task_agents,
             agent_capacities=request.agent_capacities,
+            task_profiles=tuple(
+                TaskSchedulingProfile(
+                    task_id=profile.task_id,
+                    risk_level=profile.risk_level,
+                    minimum_quality_tier=profile.minimum_quality_tier,
+                    estimated_cost=profile.estimated_cost,
+                    priority=profile.priority,
+                    provider_available=profile.provider_available,
+                )
+                for profile in request.task_profiles
+            ),
+            max_project_cost=request.max_project_cost,
         )
 
         try:
@@ -84,6 +96,7 @@ class TitanWorkflow:
                 status="COMPLETED",
                 completed_task_ids=tuple(completed_task_ids),
                 execution_waves=schedule.waves,
+                estimated_schedule_cost=schedule.estimated_cost,
                 run_id=run_id,
             )
         except Exception as exc:
