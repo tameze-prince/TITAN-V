@@ -94,6 +94,7 @@ def test_scheduler_prioritizes_the_critical_path_when_capacity_is_limited() -> N
         ("e",),
     )
 
+
 def test_scheduler_orders_ready_tasks_by_risk_quality_and_priority() -> None:
     scheduler = DependencyAwareScheduler()
 
