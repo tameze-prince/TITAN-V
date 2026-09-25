@@ -9270,3 +9270,105 @@ Evaluation
 ---
 
 # END OF LIVE ORCHESTRATION FEEDBACK CHECKPOINT
+
+---
+
+# 220. TITAN ADAPTIVE GRAPH REPAIR + REPLANNING CHECKPOINT — 2026-09-25
+
+## Status
+
+TITAN can now transform a failed workflow into a new selective task-graph version instead of restarting the original graph blindly.
+
+Implemented:
+
+~~~text
+[X] Failure impact analysis
+[X] Downstream dependency-closure calculation
+[X] Selective task re-execution planning
+[X] Preservation of successful unaffected work
+[X] Deterministic alternate-agent selection for failed tasks
+[X] New versioned task graph creation
+[X] Dependency remapping into the new graph
+[X] Project-state update to the new graph
+[X] Durable TaskGraphReplanned event
+[X] Replan memory record
+[X] POST /api/v1/projects/{project_id}/workflows/{workflow_id}/replan
+[X] Adaptive replanner unit tests
+~~~
+
+## Adaptive repair model
+
+~~~text
+Failed Workflow
+      ↓
+Failed / Blocked Tasks
+      ↓
+Dependency Impact Closure
+      ↓
+Failed Task Reassignment
+      ↓
+New Task Graph Version
+      ↓
+Preserve Unaffected Completed Work
+      ↓
+Selective Re-execution
+      ↓
+Evaluation
+~~~
+
+## Selective execution
+
+Tasks outside the failure impact closure are preserved as COMPLETED in the new graph when their previous execution succeeded.
+
+Impacted tasks are reset to PENDING so a new workflow can execute only the invalidated portion of the graph.
+
+This preserves graph lineage while avoiding unnecessary repetition of successful work.
+
+## Agent reassignment
+
+For a failed task, the replanner searches registered agents with compatible capabilities and sufficient risk ceiling while excluding the previously assigned agent.
+
+If no alternate compatible agent exists, the original assignment is preserved and the task remains eligible for re-execution.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] automatic replan trigger after workflow failure
+[ ] semantic root-cause diagnosis for graph repair
+[ ] evaluator-driven graph mutation
+[ ] model/provider migration based on failure history
+[ ] human approval for high-impact replans
+[ ] automatic start of the replacement workflow
+[ ] replan effectiveness metrics
+[ ] rollback / cancellation of an invalid replan
+~~~
+
+## Next phase
+
+~~~text
+TITAN AUTONOMOUS RECOVERY LOOP
+~~~
+
+The next layer should connect failure detection directly to adaptive recovery policy:
+
+~~~text
+Execution Failure
+      ↓
+Evidence + Evaluation
+      ↓
+Recovery Policy
+      ↓
+Replan / Retry / Reassign / Escalate
+      ↓
+Replacement Workflow
+      ↓
+Evaluate Recovery
+      ↓
+Continue / Escalate / Human Approval
+~~~
+
+---
+
+# END OF ADAPTIVE GRAPH REPAIR + REPLANNING CHECKPOINT
