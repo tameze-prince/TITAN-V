@@ -26,6 +26,7 @@ from titan.runtime.intent import IntentCompiler, IntentRepresentation
 from titan.runtime.memory import MemoryStore
 from titan.runtime.model_router import ModelBudget, ModelSelectionRequest
 from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
+from titan.runtime.scheduler import DependencyAwareScheduler, TaskScheduleError, TaskSchedulingProfile
 from titan.runtime.planning_service import persist_task_graph
 from titan.runtime.service import get_agent_runtime
 from titan.workflows.contracts import WorkflowInput, WorkflowTaskProfile
@@ -782,6 +783,56 @@ async def create_and_start_workflow(
     )
 
     try:
+        preflight_schedule = DependencyAwareScheduler().build(
+            requested_ids,
+            tuple(
+                (
+                    task_id,
+                    tuple(sorted(dependency_map[task_id])),
+                )
+                for task_id in requested_ids
+            ),
+            task_agents=tuple(task_agents),
+            agent_capacities=tuple(sorted(used_agents.items())),
+            task_profiles=tuple(
+                TaskSchedulingProfile(
+                    task_id=profile.task_id,
+                    risk_level=profile.risk_level,
+                    minimum_quality_tier=profile.minimum_quality_tier,
+                    estimated_cost=profile.estimated_cost,
+                    priority=profile.priority,
+                    provider_available=profile.provider_available,
+                )
+                for profile in task_profiles
+            ),
+            max_project_cost=settings.orchestration_max_cost,
+        )
+    except TaskScheduleError as exc:
+        for task in tasks:
+            task.workflow_id = None
+        workflow.status = "FAILED"
+        if task_graph is not None:
+            task_graph.status = "READY"
+        session.add(
+            EventModel(
+                project_id=project_id,
+                type="WorkflowSchedulingRejected",
+                actor_type="SYSTEM",
+                aggregate_type="WORKFLOW",
+                aggregate_id=workflow.id,
+                payload={
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                },
+            )
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Workflow rejected by orchestration policy: {exc}",
+        ) from exc
+
+    try:
         await temporal_client.start_workflow(
             TitanWorkflow.run,
             request,
@@ -824,10 +875,7 @@ async def create_and_start_workflow(
                     len(items)
                     for items in dependency_map.values()
                 ),
-                "estimated_schedule_cost": sum(
-                    profile.estimated_cost
-                    for profile in task_profiles
-                ),
+                "estimated_schedule_cost": preflight_schedule.estimated_cost,
                 "max_project_cost": settings.orchestration_max_cost,
                 "task_profile_count": len(task_profiles),
             },
