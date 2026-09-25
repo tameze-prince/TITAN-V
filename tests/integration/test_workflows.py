@@ -80,6 +80,11 @@ async def test_create_and_start_workflow_persists_graph() -> None:
     assert response.status_code == 201
     assert len(fake_temporal.started) == 1
     assert fake_temporal.started[0]["task_queue"] == settings.temporal_task_queue
+    assert fake_temporal.started[0]["request"].task_ids == tuple(
+        str(task_id)
+        for task_id in task_ids
+    )
+    assert fake_temporal.started[0]["request"].dependencies == ()
 
     async with SessionFactory() as session:
         workflow_id = response.json()["id"]

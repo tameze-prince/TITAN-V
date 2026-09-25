@@ -66,10 +66,14 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
             fake_mark_workflow_failed,
         ],
     ):
+        task_a = str(uuid4())
+        task_b = str(uuid4())
+        task_c = str(uuid4())
         request = WorkflowInput(
             workflow_id=str(uuid4()),
             project_id=str(uuid4()),
-            task_ids=(str(uuid4()), str(uuid4())),
+            task_ids=(task_a, task_b, task_c),
+            dependencies=((task_c, (task_a, task_b)),),
         )
         result = await asyncio.wait_for(
             client.execute_workflow(
@@ -83,3 +87,7 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
 
     assert result.status == "COMPLETED"
     assert result.completed_task_ids == request.task_ids
+    assert result.execution_waves == (
+        (task_a, task_b),
+        (task_c,),
+    )
