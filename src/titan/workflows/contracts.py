@@ -22,6 +22,9 @@ class WorkflowInput:
     agent_capacities: tuple[tuple[str, int], ...] = field(default_factory=tuple)
     task_profiles: tuple[WorkflowTaskProfile, ...] = field(default_factory=tuple)
     max_project_cost: float = 0.0
+    precompleted_task_ids: tuple[str, ...] = field(default_factory=tuple)
+    recovery_attempt: int = 0
+    recovery_root_workflow_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
