@@ -10,6 +10,12 @@ from titan.runtime.planner import (
     TaskGraphPlanner,
     TaskPlanNode,
 )
+from titan.runtime.scheduler import (
+    DependencyAwareScheduler,
+    TaskSchedule,
+    TaskScheduleCycleError,
+    TaskScheduleError,
+)
 
 __all__ = [
     "AgentRuntime",
@@ -29,9 +35,4 @@ __all__ = [
     "Workspace",
     "WorkspaceManager",
     "get_agent_runtime",
-]from titan.runtime.scheduler import (
-    DependencyAwareScheduler,
-    TaskSchedule,
-    TaskScheduleCycleError,
-    TaskScheduleError,
-)
+]
