@@ -96,7 +96,6 @@ class TitanWorkflow:
             return WorkflowResult(
                 workflow_id=request.workflow_id,
                 status="COMPLETED",
-                completed_task_ids=tuple(completed_task_ids),
                 completed_task_ids=tuple(
                     task_id
                     for task_id in request.task_ids
