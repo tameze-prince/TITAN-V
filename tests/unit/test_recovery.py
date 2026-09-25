@@ -60,3 +60,19 @@ def test_recovery_policy_stops_after_attempt_budget() -> None:
 
     assert decision.action == "ESCALATE"
     assert "budget exhausted" in decision.reason
+
+
+def test_recovery_policy_rejects_invalid_risk_ceiling() -> None:
+    policy = RecoveryPolicy(enabled=True, max_auto_risk_level="R9")
+
+    try:
+        policy.assess(
+            autonomy_level=5,
+            current_attempt=0,
+            failed_risk_levels=("R1",),
+            approval_required=False,
+        )
+    except ValueError as exc:
+        assert "Unsupported automatic recovery risk ceiling" in str(exc)
+    else:
+        raise AssertionError("Expected invalid recovery risk ceiling to be rejected")
