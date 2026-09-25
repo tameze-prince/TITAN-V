@@ -8777,3 +8777,125 @@ Project State Update
 ---
 
 # END OF TASK GRAPH + PROJECT STATE FOUNDATION CHECKPOINT
+
+---
+
+# 216. DEPENDENCY-AWARE PARALLEL WORKFLOW SCHEDULER CHECKPOINT — 2026-09-25
+
+## Status
+
+TITAN workflow execution now schedules a task graph as deterministic dependency-aware parallel waves.
+
+Implemented:
+
+~~~text
+[X] Explicit workflow dependency payload
+[X] Deterministic DAG-to-wave scheduler
+[X] Parallel execution of independent tasks
+[X] Dependency validation before workflow execution
+[X] Cycle detection at scheduling time
+[X] Outside-workflow dependency rejection
+[X] Maximum parallelism observability in WorkflowResult
+[X] Runtime dependency checks remain as defense-in-depth
+[X] Workflow integration tests updated for dependency propagation
+[X] Scheduler unit tests
+~~~
+
+## Execution model
+
+~~~text
+Task Graph
+    ↓
+Dependency Map
+    ↓
+Ready Set
+    ↓
+Parallel Wave
+    ↓
+Task Results
+    ↓
+Next Ready Set
+    ↓
+...
+~~~
+
+Tasks with no mutual dependency are executed in the same Temporal workflow wave.
+
+Dependent tasks do not start until every dependency in their wave has completed successfully.
+
+The scheduler is deterministic:
+- task ordering follows the workflow input ordering
+- dependency sets are normalized
+- cycles fail before execution can deadlock
+- dependencies outside the workflow are rejected explicitly
+
+## Workflow contract
+
+WorkflowInput now carries the durable dependency edges required for scheduling.
+
+WorkflowResult records the execution waves in addition to completed task IDs.
+
+This preserves the lineage:
+
+~~~text
+Task Graph
+   ↓
+Workflow Input
+   ↓
+Execution Schedule
+   ↓
+Temporal Activities
+~~~
+
+## Failure semantics
+
+A failure in a parallel wave stops scheduling subsequent waves while allowing the current wave activity results to settle.
+
+This prevents dependent work from being launched after an upstream failure.
+
+The existing activity-level dependency gate remains active as a second safety boundary against invalid execution.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] agent capacity-aware scheduling
+[ ] cost-aware scheduling
+[ ] quality-tier-aware routing per wave
+[ ] dynamic priority / critical-path scheduling
+[ ] speculative execution
+[ ] automatic graph repair after wave failure
+[ ] adaptive replanning from evidence
+[ ] human approval nodes
+~~~
+
+## Next phase
+
+~~~text
+INTELLIGENT ORCHESTRATION
+~~~
+
+The next scheduler layer should combine:
+
+~~~text
+Dependency Readiness
+      +
+Agent Capability
+      +
+Agent Capacity
+      +
+Quality Requirement
+      +
+Model Budget
+      +
+Risk
+      +
+Critical Path
+      ↓
+Scheduling Decision
+~~~
+
+---
+
+# END OF DEPENDENCY-AWARE PARALLEL WORKFLOW SCHEDULER CHECKPOINT
