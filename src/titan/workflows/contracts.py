@@ -7,6 +7,8 @@ class WorkflowInput:
     project_id: str
     task_ids: tuple[str, ...] = field(default_factory=tuple)
     dependencies: tuple[tuple[str, tuple[str, ...]], ...] = field(default_factory=tuple)
+    task_agents: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    agent_capacities: tuple[tuple[str, int], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True, slots=True)
