@@ -3,6 +3,7 @@ from titan.runtime.workspace import Workspace, WorkspaceManager
 from titan.runtime.memory import MemoryStore
 from titan.runtime.evaluation_service import EvaluationEngine
 from titan.runtime.intent import IntentCompiler, IntentRepresentation
+from titan.runtime.replanner import AdaptiveReplanner, Reassignment, ReplanDecision
 from titan.runtime.planner import (
     CapabilityResolutionError,
     CapabilityResolver,
@@ -25,6 +26,7 @@ __all__ = [
     "CapabilityResolutionError",
     "CapabilityResolver",
     "DependencyAwareScheduler",
+    "AdaptiveReplanner",
     "EvaluationEngine",
     "IntentCompiler",
     "IntentRepresentation",
@@ -37,6 +39,8 @@ __all__ = [
     "TaskScheduleCycleError",
     "TaskScheduleError",
     "TaskScheduleProviderError",
+    "Reassignment",
+    "ReplanDecision",
     "TaskSchedulingProfile",
     "Workspace",
     "WorkspaceManager",
