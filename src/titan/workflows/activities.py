@@ -299,6 +299,7 @@ async def orchestrate_task(
                         "run_id": run_id,
                         "provider": execution.provider,
                         "model": execution.model,
+                        "duration_ms": execution.duration_ms,
                         "usage": execution.usage,
                     },
                 )
@@ -329,6 +330,7 @@ async def orchestrate_task(
                         "agent_name": execution.agent_name,
                         "provider": execution.provider,
                         "model": execution.model,
+                        "duration_ms": execution.duration_ms,
                     },
                 )
             )

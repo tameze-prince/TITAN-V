@@ -26,6 +26,7 @@ class TaskSchedulingProfile:
     risk_level: str = "R1"
     minimum_quality_tier: int = 1
     estimated_cost: float = 0.0
+    expected_duration_ms: int = 0
     priority: int = 0
     provider_available: bool = True
 
@@ -34,6 +35,7 @@ class TaskSchedulingProfile:
 class TaskSchedule:
     waves: tuple[tuple[str, ...], ...]
     estimated_cost: float = 0.0
+    estimated_makespan_ms: int = 0
 
     @property
     def task_ids(self) -> tuple[str, ...]:
@@ -86,6 +88,7 @@ class DependencyAwareScheduler:
         remaining = set(unique_task_ids)
         waves: list[tuple[str, ...]] = []
         estimated_cost = 0.0
+        estimated_makespan_ms = 0
 
         while remaining:
             ready = [
@@ -111,6 +114,7 @@ class DependencyAwareScheduler:
                     -RISK_ORDER[profile_map[task_id].risk_level],
                     -profile_map[task_id].minimum_quality_tier,
                     -profile_map[task_id].priority,
+                    -profile_map[task_id].expected_duration_ms,
                     profile_map[task_id].estimated_cost,
                     position[task_id],
                 )
@@ -149,6 +153,10 @@ class DependencyAwareScheduler:
                 )
 
             wave = tuple(selected)
+            estimated_makespan_ms += max(
+                (profile_map[task_id].expected_duration_ms for task_id in wave),
+                default=0,
+            )
             waves.append(wave)
             completed.update(wave)
             remaining.difference_update(wave)
@@ -156,6 +164,7 @@ class DependencyAwareScheduler:
         return TaskSchedule(
             waves=tuple(waves),
             estimated_cost=round(estimated_cost, 10),
+            estimated_makespan_ms=estimated_makespan_ms,
         )
 
     @staticmethod
@@ -286,6 +295,10 @@ class DependencyAwareScheduler:
             if profile.estimated_cost < 0:
                 raise TaskScheduleError(
                     f"Task '{profile.task_id}' has a negative estimated cost"
+                )
+            if profile.expected_duration_ms < 0:
+                raise TaskScheduleError(
+                    f"Task '{profile.task_id}' has a negative expected duration"
                 )
             seen.add(profile.task_id)
             result[profile.task_id] = profile

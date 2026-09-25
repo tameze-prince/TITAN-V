@@ -49,6 +49,7 @@ class TitanWorkflow:
                     risk_level=profile.risk_level,
                     minimum_quality_tier=profile.minimum_quality_tier,
                     estimated_cost=profile.estimated_cost,
+                    expected_duration_ms=profile.expected_duration_ms,
                     priority=profile.priority,
                     provider_available=profile.provider_available,
                 )
@@ -97,6 +98,7 @@ class TitanWorkflow:
                 completed_task_ids=tuple(completed_task_ids),
                 execution_waves=schedule.waves,
                 estimated_schedule_cost=schedule.estimated_cost,
+                estimated_makespan_ms=schedule.estimated_makespan_ms,
                 run_id=run_id,
             )
         except Exception as exc:

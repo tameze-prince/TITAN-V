@@ -91,6 +91,7 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
                     risk_level="R2",
                     minimum_quality_tier=2,
                     estimated_cost=1.0,
+                    expected_duration_ms=100,
                     priority=5,
                 ),
                 WorkflowTaskProfile(
@@ -98,18 +99,21 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
                     risk_level="R1",
                     minimum_quality_tier=1,
                     estimated_cost=1.0,
+                    expected_duration_ms=50,
                 ),
                 WorkflowTaskProfile(
                     task_id=task_c,
                     risk_level="R3",
                     minimum_quality_tier=2,
                     estimated_cost=2.0,
+                    expected_duration_ms=300,
                 ),
                 WorkflowTaskProfile(
                     task_id=task_d,
                     risk_level="R1",
                     minimum_quality_tier=1,
                     estimated_cost=0.5,
+                    expected_duration_ms=200,
                 ),
             ),
             max_project_cost=10.0,
@@ -137,3 +141,4 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
         (task_c,),
     )
     assert result.estimated_schedule_cost == 4.5
+    assert result.estimated_makespan_ms == 350
