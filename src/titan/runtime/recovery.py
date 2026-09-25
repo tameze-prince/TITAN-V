@@ -26,6 +26,15 @@ class RecoveryPolicy:
         failed_risk_levels: tuple[str, ...],
         approval_required: bool,
     ) -> RecoveryAssessment:
+        if self.max_attempts < 1:
+            raise ValueError("Recovery max_attempts must be at least 1")
+        if self.min_autonomy_level < 0:
+            raise ValueError("Recovery minimum autonomy level cannot be negative")
+        if self.max_auto_risk_level not in RISK_ORDER:
+            raise ValueError(
+                f"Unsupported automatic recovery risk ceiling: {self.max_auto_risk_level}"
+            )
+
         if current_attempt >= self.max_attempts:
             return RecoveryAssessment(
                 action="ESCALATE",
