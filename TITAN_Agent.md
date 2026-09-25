@@ -9167,3 +9167,106 @@ Continue / Repair / Escalate
 ---
 
 # END OF QUALITY / COST / RISK ORCHESTRATION CHECKPOINT
+
+---
+
+# 219. TITAN LIVE ORCHESTRATION FEEDBACK CHECKPOINT — 2026-09-25
+
+## Status
+
+TITAN now feeds real execution telemetry back into future workflow scheduling decisions.
+
+Implemented:
+
+~~~text
+[X] Persist task execution duration with ModelUsageRecorded
+[X] Preserve model/provider identity with runtime observations
+[X] Reuse recent actual model cost observations
+[X] Reuse recent task duration observations
+[X] Estimate workflow makespan from dependency waves
+[X] Feed historical runtime evidence into scheduling profiles
+[X] Prefer longer observed tasks when other scheduling priorities are equal
+[X] Expose estimated makespan in WorkflowResult
+[X] Expose schedule telemetry in workflow events
+[X] Scheduler tests for live-duration signals
+~~~
+
+## Feedback loop
+
+~~~text
+Task Execution
+    ↓
+Usage + Duration
+    ↓
+ModelUsageRecorded
+    ↓
+Recent Runtime History
+    ↓
+Scheduling Profile
+    ↓
+Next Workflow
+    ↓
+More accurate cost / duration estimate
+~~~
+
+Historical observations are matched to the model route used by the current scheduler selection.
+
+The scheduler uses the latest five observations for a task/model pair when available.
+
+When no history exists, TITAN falls back to the configured model token budget for cost estimation and a zero historical duration estimate.
+
+## Makespan estimation
+
+For each sequential execution wave, TITAN estimates its duration using the longest expected task duration in that wave.
+
+The workflow estimate is therefore:
+
+~~~text
+estimated makespan = sum(max task duration per wave)
+~~~
+
+This is an orchestration estimate, not a promise about wall-clock execution time.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] live worker telemetry
+[ ] provider latency telemetry
+[ ] historical failure-rate routing
+[ ] automatic task graph mutation from runtime evidence
+[ ] adaptive agent reassignment after failure
+[ ] automatic graph repair / replanning
+[ ] actual-vs-estimated model optimization
+[ ] concurrent workflow budget reservation
+[ ] human approval gates for adaptive changes
+~~~
+
+## Next phase
+
+~~~text
+TITAN ADAPTIVE GRAPH REPAIR + REPLANNING
+~~~
+
+The next layer should turn runtime evidence into structural decisions:
+
+~~~text
+Failure / Quality Signal
+        ↓
+Root Cause / Evidence
+        ↓
+Graph Impact Analysis
+        ↓
+Repair Strategy
+        ↓
+New Task Graph Version
+        ↓
+Selective Re-execution
+        ↓
+Evaluation
+~~~
+
+---
+
+# END OF LIVE ORCHESTRATION FEEDBACK CHECKPOINT
