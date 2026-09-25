@@ -127,6 +127,7 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
                 ),
             ),
             max_project_cost=10.0,
+            precompleted_task_ids=(task_a,),
         )
         result = await asyncio.wait_for(
             client.execute_workflow(
@@ -149,5 +150,5 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
         (task_b, task_d),
         (task_c,),
     )
-    assert result.estimated_schedule_cost == 4.5
-    assert result.estimated_makespan_ms == 350
+    assert result.estimated_schedule_cost == 3.5
+    assert result.estimated_makespan_ms == 500
