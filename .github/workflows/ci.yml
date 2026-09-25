@@ -17,48 +17,6 @@ jobs:
       TITAN_TEMPORAL_NAMESPACE: default
       TITAN_TEMPORAL_TASK_QUEUE: titan-ci
 
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_DB: titan
-          POSTGRES_USER: titan
-          POSTGRES_PASSWORD: titan
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U titan -d titan"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-
-      temporal-postgres:
-        image: postgres:18
-        env:
-          POSTGRES_DB: temporal
-          POSTGRES_USER: titan
-          POSTGRES_PASSWORD: titan
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd "pg_isready -U titan -d temporal"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-
-      temporal:
-        image: temporalio/auto-setup:1.29.7
-        env:
-          DB: postgres12
-          DB_PORT: 5432
-          POSTGRES_USER: titan
-          POSTGRES_PWD: titan
-          POSTGRES_SEEDS: temporal-postgres
-          TEMPORAL_ADDRESS: temporal:7233
-          TEMPORAL_CLI_ADDRESS: temporal:7233
-        ports:
-          - 7233:7233
-
     steps:
       - uses: actions/checkout@v4
 
@@ -69,29 +27,65 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
 
+      - name: Start CI infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker network create titan-ci
+
+          docker run -d             --name titan-postgres             --network titan-ci             -e POSTGRES_DB=titan             -e POSTGRES_USER=titan             -e POSTGRES_PASSWORD=titan             -p 5432:5432             postgres:18
+
+          deadline=$((SECONDS + 90))
+          until docker exec titan-postgres pg_isready -U titan -d titan >/dev/null 2>&1; do
+            if (( SECONDS >= deadline )); then
+              docker logs titan-postgres || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker exec titan-postgres             psql -U titan -d titan -c "CREATE DATABASE temporal;"
+
+          docker run -d             --name temporal             --network titan-ci             -e DB=postgres12             -e DB_PORT=5432             -e POSTGRES_USER=titan             -e POSTGRES_PWD=titan             -e POSTGRES_SEEDS=titan-postgres             -e TEMPORAL_ADDRESS=temporal:7233             -e TEMPORAL_CLI_ADDRESS=temporal:7233             -p 7233:7233             temporalio/auto-setup:1.29.7
+
       - name: Database migrations
         run: alembic upgrade head
 
       - name: Wait for Temporal
+        shell: bash
         run: |
-          python - <<'PY'
+          set -euo pipefail
+
+          deadline=$((SECONDS + 120))
+          until python - <<'PY'
           import socket
-          import time
 
-          deadline = time.time() + 120
-          while time.time() < deadline:
-              try:
-                  with socket.create_connection(("127.0.0.1", 7233), timeout=2):
-                      print("Temporal is accepting TCP connections")
-                      raise SystemExit(0)
-              except OSError:
-                  time.sleep(2)
-
-          raise SystemExit("Temporal did not become ready within 120 seconds")
+          with socket.create_connection(("127.0.0.1", 7233), timeout=2):
+              pass
           PY
+          do
+            if (( SECONDS >= deadline )); then
+              docker logs temporal || true
+              exit 1
+            fi
+            sleep 2
+          done
 
       - name: Lint
         run: ruff check .
 
       - name: Tests
         run: pytest
+
+      - name: Infrastructure logs
+        if: always()
+        run: |
+          docker logs temporal || true
+          docker logs titan-postgres || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f temporal titan-postgres || true
+          docker network rm titan-ci || true
