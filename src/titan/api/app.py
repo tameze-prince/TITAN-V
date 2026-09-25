@@ -28,6 +28,7 @@ from titan.runtime.model_router import BudgetExceeded, ModelBudget, ModelSelecti
 from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
 from titan.runtime.scheduler import DependencyAwareScheduler, TaskScheduleError, TaskSchedulingProfile
 from titan.runtime.planning_service import persist_task_graph
+from titan.runtime.replanning_service import replan_failed_workflow
 from titan.runtime.service import get_agent_runtime
 from titan.workflows.contracts import WorkflowInput, WorkflowTaskProfile
 from titan.workflows.runtime import TitanWorkflow
@@ -153,6 +154,23 @@ class ProjectStateResponse(BaseModel):
     phase: str
     version: int
     state: dict
+
+class AgentReassignmentResponse(BaseModel):
+    task_id: UUID
+    previous_agent: str | None
+    new_agent: str
+    reason: str
+
+
+class ReplanResponse(BaseModel):
+    task_graph_id: UUID
+    project_id: UUID
+    source_workflow_id: UUID
+    version: int
+    status: str
+    failed_task_ids: list[UUID]
+    impacted_task_ids: list[UUID]
+    reassignments: list[AgentReassignmentResponse]
 
 
 @asynccontextmanager
@@ -498,6 +516,73 @@ async def get_project_state(
         state=state.state_json,
     )
 
+
+
+
+@app.post(
+    "/api/v1/projects/{project_id}/workflows/{workflow_id}/replan",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ReplanResponse,
+)
+async def replan_failed_workflow_endpoint(
+    project_id: UUID,
+    workflow_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> ReplanResponse:
+    project = await session.scalar(
+        select(ProjectModel).where(ProjectModel.id == project_id)
+    )
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    workflow = await session.scalar(
+        select(WorkflowModel).where(
+            WorkflowModel.id == workflow_id,
+            WorkflowModel.project_id == project_id,
+        )
+    )
+    if workflow is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow not found",
+        )
+
+    runtime = get_agent_runtime()
+    try:
+        graph, _, decision = await replan_failed_workflow(
+            session,
+            project=project,
+            workflow=workflow,
+            capability_registry=runtime.capabilities,
+            contracts=runtime.contracts.all(),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return ReplanResponse(
+        task_graph_id=graph.id,
+        project_id=project_id,
+        source_workflow_id=workflow_id,
+        version=graph.version,
+        status=graph.status,
+        failed_task_ids=[UUID(task_id) for task_id in decision.failed_task_ids],
+        impacted_task_ids=[UUID(task_id) for task_id in decision.impacted_task_ids],
+        reassignments=[
+            AgentReassignmentResponse(
+                task_id=UUID(item.task_id),
+                previous_agent=item.previous_agent,
+                new_agent=item.new_agent,
+                reason=item.reason,
+            )
+            for item in decision.reassignments
+        ],
+    )
 
 @app.post(
     "/api/v1/projects/{project_id}/tasks",
