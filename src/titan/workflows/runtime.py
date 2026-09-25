@@ -13,6 +13,7 @@ with workflow.unsafe.imports_passed_through():
         mark_workflow_failed,
         mark_workflow_started,
         orchestrate_task,
+        attempt_automatic_recovery,
     )
 
 
@@ -111,6 +112,12 @@ class TitanWorkflow:
                 mark_workflow_failed,
                 args=(request.workflow_id, run_id, str(exc)),
                 start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=RETRY_POLICY,
+            )
+            await workflow.execute_activity(
+                attempt_automatic_recovery,
+                args=(request.workflow_id, run_id, str(exc)),
+                start_to_close_timeout=timedelta(seconds=120),
                 retry_policy=RETRY_POLICY,
             )
             raise
