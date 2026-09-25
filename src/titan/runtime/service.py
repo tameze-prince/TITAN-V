@@ -54,6 +54,7 @@ GENERAL_AGENT = AgentContract(
         "Return a concise summary, structured result data, and a useful artifact."
     ),
     capabilities=("analysis", "structured-output", "artifact-write"),
+    max_concurrency=settings.general_agent_max_concurrency,
     model=(
         "openai:" + settings.openai_model
         if settings.model_provider == "openai" and settings.openai_api_key
