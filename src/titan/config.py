@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5"
     openai_base_url: str | None = None
     agent_execution_timeout_seconds: int = 120
+    general_agent_max_concurrency: int = 4
+    engineering_agent_max_concurrency: int = 2
     sandbox_image: str = "python:3.13-slim"
     sandbox_network: str = "none"
     sandbox_memory: str = "512m"
