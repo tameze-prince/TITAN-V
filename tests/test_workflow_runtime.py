@@ -7,7 +7,7 @@ from temporalio import activity
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from titan.workflows.contracts import WorkflowInput
+from titan.workflows.contracts import WorkflowInput, WorkflowTaskProfile
 from titan.workflows.runtime import TitanWorkflow
 
 
@@ -85,6 +85,34 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
                 ("general-executor", 1),
                 ("engineering-executor", 1),
             ),
+            task_profiles=(
+                WorkflowTaskProfile(
+                    task_id=task_a,
+                    risk_level="R2",
+                    minimum_quality_tier=2,
+                    estimated_cost=1.0,
+                    priority=5,
+                ),
+                WorkflowTaskProfile(
+                    task_id=task_b,
+                    risk_level="R1",
+                    minimum_quality_tier=1,
+                    estimated_cost=1.0,
+                ),
+                WorkflowTaskProfile(
+                    task_id=task_c,
+                    risk_level="R3",
+                    minimum_quality_tier=2,
+                    estimated_cost=2.0,
+                ),
+                WorkflowTaskProfile(
+                    task_id=task_d,
+                    risk_level="R1",
+                    minimum_quality_tier=1,
+                    estimated_cost=0.5,
+                ),
+            ),
+            max_project_cost=10.0,
         )
         result = await asyncio.wait_for(
             client.execute_workflow(
@@ -108,3 +136,4 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
         (task_b,),
         (task_c,),
     )
+    assert result.estimated_schedule_cost == 4.5
