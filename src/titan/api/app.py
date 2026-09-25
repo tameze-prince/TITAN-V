@@ -669,6 +669,42 @@ async def create_and_start_workflow(
             )
         dependency_map[str(task_id)].append(dependency_str)
 
+    history_rows = list(
+        await session.scalars(
+            select(EventModel)
+            .where(
+                EventModel.project_id == project_id,
+                EventModel.type == "ModelUsageRecorded",
+                EventModel.aggregate_type == "TASK",
+                EventModel.aggregate_id.in_([task.id for task in tasks]),
+            )
+            .order_by(EventModel.created_at.desc())
+        )
+    )
+    usage_history: dict[tuple[UUID, str], list[tuple[float | None, int | None]]] = {}
+    for event in history_rows:
+        payload = event.payload or {}
+        model = str(payload.get("model") or "")
+        if not model:
+            continue
+        usage = payload.get("usage") or {}
+        cost = usage.get("estimated_cost")
+        duration = payload.get("duration_ms")
+        if duration is None:
+            duration = payload.get("elapsed_ms")
+        try:
+            parsed_cost = float(cost) if cost is not None else None
+        except (TypeError, ValueError):
+            parsed_cost = None
+        try:
+            parsed_duration = int(duration) if duration is not None else None
+        except (TypeError, ValueError):
+            parsed_duration = None
+        key = (event.aggregate_id, model)
+        usage_history.setdefault(key, []).append(
+            (parsed_cost, parsed_duration)
+        )
+
     owner_agent_ids = {
         task.owner_agent_id
         for task in tasks
@@ -744,12 +780,33 @@ async def create_and_start_workflow(
                     ),
                 )
             )
-            estimated_cost = runtime.model_router.estimate_cost(
+            fallback_estimated_cost = runtime.model_router.estimate_cost(
                 selection.route,
                 {
                     "input_tokens": settings.model_max_input_tokens,
                     "output_tokens": settings.model_max_output_tokens,
                 },
+            )
+            history = usage_history.get((task.id, selection.route.model), ())[:5]
+            observed_costs = [
+                value
+                for value, _ in history
+                if value is not None
+            ]
+            observed_durations = [
+                value
+                for _, value in history
+                if value is not None
+            ]
+            estimated_cost = (
+                sum(observed_costs) / len(observed_costs)
+                if observed_costs
+                else fallback_estimated_cost
+            )
+            expected_duration_ms = (
+                round(sum(observed_durations) / len(observed_durations))
+                if observed_durations
+                else 0
             )
         except (BudgetExceeded, KeyError, LookupError, ValueError):
             provider_available = False
@@ -760,6 +817,7 @@ async def create_and_start_workflow(
                 risk_level=task.risk_level,
                 minimum_quality_tier=minimum_quality_tier,
                 estimated_cost=estimated_cost,
+                expected_duration_ms=expected_duration_ms,
                 priority=priority,
                 provider_available=provider_available,
             )
@@ -800,6 +858,7 @@ async def create_and_start_workflow(
                     risk_level=profile.risk_level,
                     minimum_quality_tier=profile.minimum_quality_tier,
                     estimated_cost=profile.estimated_cost,
+                    expected_duration_ms=profile.expected_duration_ms,
                     priority=profile.priority,
                     provider_available=profile.provider_available,
                 )
@@ -876,6 +935,7 @@ async def create_and_start_workflow(
                     for items in dependency_map.values()
                 ),
                 "estimated_schedule_cost": preflight_schedule.estimated_cost,
+                "estimated_makespan_ms": preflight_schedule.estimated_makespan_ms,
                 "max_project_cost": settings.orchestration_max_cost,
                 "task_profile_count": len(task_profiles),
             },
