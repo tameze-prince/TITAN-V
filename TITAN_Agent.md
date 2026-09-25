@@ -8899,3 +8899,124 @@ Scheduling Decision
 ---
 
 # END OF DEPENDENCY-AWARE PARALLEL WORKFLOW SCHEDULER CHECKPOINT
+
+
+---
+
+# 217. TITAN INTELLIGENT ORCHESTRATION SCHEDULER CHECKPOINT — 2026-09-25
+
+## Status
+
+TITAN scheduling now incorporates the first operational intelligence signals beyond pure dependency readiness.
+
+Implemented:
+
+~~~text
+[X] Agent concurrency capacity
+[X] Durable agent scheduling metadata
+[X] Capacity-aware parallel waves
+[X] Deterministic critical-path prioritization
+[X] Workflow propagation of task-to-agent assignments
+[X] Workflow propagation of agent capacity constraints
+[X] Capacity scheduler tests
+[X] Temporal workflow integration coverage for capacity-aware waves
+~~~
+
+## Scheduling model
+
+~~~text
+Dependency Readiness
+      ↓
+Critical Path
+      ↓
+Agent Capacity
+      ↓
+Deterministic Wave Packing
+      ↓
+Parallel Execution
+~~~
+
+The scheduler now distinguishes:
+
+- tasks that are dependency-ready
+- tasks assigned to the same constrained agent
+- tasks assigned to different agents
+- tasks on longer downstream critical paths
+
+When an agent has a declared concurrency capacity, the scheduler never places more than that number of the agent's tasks in one execution wave.
+
+Tasks without an explicit capacity constraint retain the existing parallel scheduling behavior.
+
+## Agent contract
+
+Agent contracts now expose:
+
+~~~text
+max_concurrency
+scheduling_priority
+~~~
+
+The scheduling policy is synchronized into the PostgreSQL agent registry metadata.
+
+The workflow API reads the persisted assignment and capacity metadata and transfers it into the deterministic Temporal workflow input.
+
+## Critical-path policy
+
+Ready tasks are ordered by:
+
+~~~text
+longest remaining dependency path
+        ↓
+original workflow position
+~~~
+
+This is intentionally deterministic.
+
+The objective is to protect downstream work from starvation when a constrained agent can execute only one task at a time.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] dynamic capacity from live worker telemetry
+[ ] quality-tier-aware scheduling
+[ ] project-level model budget reservation
+[ ] cost-aware wave selection
+[ ] latency/reliability-aware provider routing
+[ ] capability-version compatibility
+[ ] speculative execution
+[ ] automatic graph repair after wave failure
+[ ] adaptive replanning from live evidence
+[ ] human approval nodes
+~~~
+
+## Next phase
+
+~~~text
+TITAN QUALITY / COST / RISK ORCHESTRATION
+~~~
+
+The scheduler should next combine:
+
+~~~text
+Dependency Readiness
+      +
+Agent Capacity
+      +
+Minimum Quality Tier
+      +
+Model Budget
+      +
+Risk
+      +
+Critical Path
+      +
+Provider Availability
+      ↓
+Scheduling Decision
+~~~
+
+---
+
+# END OF INTELLIGENT ORCHESTRATION SCHEDULER CHECKPOINT

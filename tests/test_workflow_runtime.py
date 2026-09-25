@@ -69,11 +69,22 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
         task_a = str(uuid4())
         task_b = str(uuid4())
         task_c = str(uuid4())
+        task_d = str(uuid4())
         request = WorkflowInput(
             workflow_id=str(uuid4()),
             project_id=str(uuid4()),
-            task_ids=(task_a, task_b, task_c),
+            task_ids=(task_a, task_b, task_c, task_d),
             dependencies=((task_c, (task_a, task_b)),),
+            task_agents=(
+                (task_a, "general-executor"),
+                (task_b, "general-executor"),
+                (task_c, "general-executor"),
+                (task_d, "engineering-executor"),
+            ),
+            agent_capacities=(
+                ("general-executor", 1),
+                ("engineering-executor", 1),
+            ),
         )
         result = await asyncio.wait_for(
             client.execute_workflow(
@@ -86,8 +97,14 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
         )
 
     assert result.status == "COMPLETED"
-    assert result.completed_task_ids == request.task_ids
+    assert result.completed_task_ids == (
+        task_a,
+        task_d,
+        task_b,
+        task_c,
+    )
     assert result.execution_waves == (
-        (task_a, task_b),
+        (task_a, task_d),
+        (task_b,),
         (task_c,),
     )

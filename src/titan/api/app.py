@@ -12,6 +12,7 @@ from titan.config import settings
 from titan.integrations.temporal.client import get_temporal_client
 from titan.persistence.database import close_database, get_session
 from titan.persistence.models import (
+    AgentModel,
     EventModel,
     IntentRecordModel,
     ProjectModel,
@@ -667,6 +668,42 @@ async def create_and_start_workflow(
             )
         dependency_map[str(task_id)].append(dependency_str)
 
+    owner_agent_ids = {
+        task.owner_agent_id
+        for task in tasks
+        if task.owner_agent_id is not None
+    }
+    agent_rows = (
+        list(
+            await session.scalars(
+                select(AgentModel).where(AgentModel.id.in_(owner_agent_ids))
+            )
+        )
+        if owner_agent_ids
+        else []
+    )
+    agents_by_id = {agent.id: agent for agent in agent_rows}
+
+    task_agents: list[tuple[str, str]] = []
+    used_agents: dict[str, int] = {}
+    for task in tasks:
+        if task.owner_agent_id is None:
+            continue
+        agent = agents_by_id.get(task.owner_agent_id)
+        if agent is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Assigned agent for task {task.id} is not available",
+            )
+        task_id = str(task.id)
+        task_agents.append((task_id, agent.name))
+        raw_capacity = agent.metadata_json.get("max_concurrency", 1)
+        try:
+            capacity = int(raw_capacity)
+        except (TypeError, ValueError):
+            capacity = 1
+        used_agents[agent.name] = max(1, capacity)
+
     request = WorkflowInput(
         workflow_id=str(workflow.id),
         project_id=str(project_id),
@@ -678,6 +715,8 @@ async def create_and_start_workflow(
             )
             for task_id in requested_ids
         ),
+        task_agents=tuple(task_agents),
+        agent_capacities=tuple(sorted(used_agents.items())),
     )
 
     try:

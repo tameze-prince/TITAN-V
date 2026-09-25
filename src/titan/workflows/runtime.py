@@ -41,6 +41,8 @@ class TitanWorkflow:
         schedule = DependencyAwareScheduler().build(
             request.task_ids,
             request.dependencies,
+            task_agents=request.task_agents,
+            agent_capacities=request.agent_capacities,
         )
 
         try:
