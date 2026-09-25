@@ -7,6 +7,7 @@ class WorkflowTaskProfile:
     risk_level: str = "R1"
     minimum_quality_tier: int = 1
     estimated_cost: float = 0.0
+    expected_duration_ms: int = 0
     priority: int = 0
     provider_available: bool = True
 
@@ -30,4 +31,5 @@ class WorkflowResult:
     completed_task_ids: tuple[str, ...] = field(default_factory=tuple)
     execution_waves: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     estimated_schedule_cost: float = 0.0
+    estimated_makespan_ms: int = 0
     run_id: str | None = None
