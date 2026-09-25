@@ -11,6 +11,7 @@ from titan.persistence.models import (
     ArtifactModel,
     EvaluationModel,
     EventModel,
+    ProjectModel,
     ProjectStateModel,
     RepairAttemptModel,
     RunModel,
@@ -539,9 +540,9 @@ async def attempt_automatic_recovery(
     from titan.config import settings
     from titan.integrations.temporal.client import get_temporal_client
     from titan.runtime.recovery import RecoveryPolicy
-    from titan.runtime.replanner import RISK_ORDER
     from titan.runtime.replanning_service import replan_failed_workflow
     from titan.runtime.service import get_agent_runtime
+    from titan.workflows.runtime import TitanWorkflow
     from titan.workflows.service import build_workflow_input
 
     async with SessionFactory() as session:
@@ -763,6 +764,7 @@ async def attempt_automatic_recovery(
             await session.commit()
             return f"STARTED:{replacement.id}"
         except Exception as exc:
+            await session.rollback()
             session.add(
                 EventModel(
                     project_id=project.id,
