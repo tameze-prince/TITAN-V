@@ -47,7 +47,7 @@ jobs:
           --health-retries 20
 
       temporal:
-        image: temporalio/auto-setup:latest
+        image: temporalio/auto-setup:1.29.7
         env:
           DB: postgres12
           DB_PORT: 5432
