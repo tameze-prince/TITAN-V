@@ -9372,3 +9372,163 @@ Continue / Escalate / Human Approval
 ---
 
 # END OF ADAPTIVE GRAPH REPAIR + REPLANNING CHECKPOINT
+
+
+---
+
+# 221. TITAN AUTONOMOUS RECOVERY LOOP CHECKPOINT — 2026-09-25
+
+## Status
+
+TITAN now closes the failure-to-recovery loop with bounded policy-controlled automatic recovery.
+
+Implemented:
+
+~~~text
+[X] Bounded recovery policy
+[X] Recovery attempt limits
+[X] Autonomy-level gate
+[X] Risk ceiling for autonomous recovery
+[X] Human-approval escalation boundary
+[X] Automatic failure-triggered recovery activity
+[X] Adaptive graph replan integration
+[X] Alternate-agent reassignment
+[X] Selective re-execution of impacted tasks
+[X] Preservation of successful unaffected work
+[X] Precompleted-task workflow scheduling
+[X] Recovery lineage metadata
+[X] Recovery escalation events
+[X] Recovery start/failure observability events
+[X] Selective recovery workflow tests
+~~~
+
+## Recovery loop
+
+~~~text
+Execution Failure
+      ↓
+WorkflowFailed
+      ↓
+Recovery Policy
+      ├── AUTO_RECOVER
+      │      ↓
+      │   Adaptive Replan
+      │      ↓
+      │   New Task Graph
+      │      ↓
+      │   Preserve Completed Work
+      │      ↓
+      │   Replacement Workflow
+      │      ↓
+      │   Evaluate
+      │
+      └── ESCALATE
+             ↓
+        Waiting for Human Decision
+~~~
+
+## Safety boundaries
+
+Automatic recovery is deliberately bounded by deployment configuration:
+
+~~~text
+TITAN_RECOVERY_AUTO_ENABLED
+TITAN_RECOVERY_MAX_ATTEMPTS
+TITAN_RECOVERY_MIN_AUTONOMY_LEVEL
+TITAN_RECOVERY_MAX_AUTO_RISK_LEVEL
+~~~
+
+The default deployment keeps automatic recovery disabled.
+
+Even when enabled, a recovery is escalated when:
+- project autonomy is below the configured threshold
+- failed work exceeds the configured risk ceiling
+- a failed task requires human approval
+- the recovery attempt budget is exhausted
+
+This prevents a generic workflow failure from silently escalating into unrestricted autonomous action.
+
+## Selective recovery
+
+A replacement graph contains the complete graph lineage but preserves successfully completed tasks.
+
+Workflow scheduling now accepts:
+
+~~~text
+precompleted_task_ids
+~~~
+
+Those tasks are treated as satisfied dependencies but are not re-executed.
+
+This closes the gap between:
+
+~~~text
+"replan only the impacted work"
+~~~
+
+and actual Temporal execution.
+
+## Recovery lineage
+
+Recovery workflows record:
+
+~~~text
+source workflow
+source run
+recovery attempt
+root recovery workflow
+source task graph
+replacement task graph
+failed tasks
+impacted tasks
+reassigned tasks
+preserved completed tasks
+~~~
+
+This makes recovery behavior auditable and bounded across multiple recovery generations.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] automatic recovery effectiveness scoring
+[ ] semantic root-cause diagnosis
+[ ] historical recovery strategy optimization
+[ ] live worker telemetry
+[ ] provider latency circuit breakers
+[ ] human approval UI
+[ ] automatic rollback of a bad recovery graph
+~~~
+
+## Next phase
+
+~~~text
+TITAN OBSERVABILITY + RECOVERY EFFECTIVENESS
+~~~
+
+The next layer should measure whether recovery actually improves outcomes:
+
+~~~text
+Failure
+  ↓
+Recovery Strategy
+  ↓
+Replacement Workflow
+  ↓
+Outcome
+  ↓
+Recovery Effectiveness
+  ├── resolved
+  ├── repeated failure
+  ├── escalated
+  └── regressions
+  ↓
+Strategy Memory
+  ↓
+Future Recovery Decision
+~~~
+
+---
+
+# END OF AUTONOMOUS RECOVERY LOOP CHECKPOINT
