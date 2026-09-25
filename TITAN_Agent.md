@@ -9020,3 +9020,150 @@ Scheduling Decision
 ---
 
 # END OF INTELLIGENT ORCHESTRATION SCHEDULER CHECKPOINT
+
+---
+
+# 218. TITAN QUALITY / COST / RISK ORCHESTRATION CHECKPOINT — 2026-09-25
+
+## Status
+
+TITAN scheduling now combines dependency readiness with deterministic quality, risk, cost and provider-admission signals.
+
+Implemented:
+
+~~~text
+[X] Per-task scheduling profiles
+[X] Risk-aware ready-task ordering
+[X] Minimum quality-tier-aware ordering
+[X] Agent scheduling priority
+[X] Conservative per-task model cost estimation
+[X] Project-level scheduling cost budget
+[X] Provider availability preflight
+[X] Workflow propagation of scheduling policy
+[X] Estimated schedule cost in WorkflowResult
+[X] Durable scheduling observability event fields
+[X] Unit coverage for quality/risk/cost/provider policy
+~~~
+
+## Scheduling decision model
+
+~~~text
+Dependency Readiness
+      ↓
+Critical Path
+      ↓
+Risk
+      ↓
+Quality Requirement
+      ↓
+Agent Priority
+      ↓
+Estimated Cost
+      ↓
+Agent Capacity
+      ↓
+Project Budget
+      ↓
+Provider Availability
+      ↓
+Deterministic Execution Wave
+~~~
+
+## Cost policy
+
+TITAN now supports a project-level orchestration budget:
+
+~~~text
+TITAN_ORCHESTRATION_MAX_COST
+~~~
+
+0 means no project scheduling cost ceiling.
+
+Before a workflow starts, the API creates deterministic task cost estimates from the configured model route and maximum input/output token limits.
+
+The scheduler uses those estimates for admission control.
+
+The runtime's existing post-execution model budget enforcement remains authoritative for actual token usage and provider cost.
+
+Therefore:
+
+~~~text
+preflight scheduling budget
+        +
+per-execution model budget
+        +
+actual usage audit
+~~~
+
+are separate controls.
+
+## Quality policy
+
+Each task carries a minimum quality tier.
+
+The scheduler uses it as a deterministic priority signal when capacity is constrained.
+
+The actual ModelRouter remains responsible for selecting a route satisfying that quality requirement during execution.
+
+## Risk policy
+
+Task risk level now participates directly in scheduling priority.
+
+Higher-risk ready tasks are considered before lower-risk ready tasks when the critical-path priority is otherwise comparable.
+
+This does not bypass the existing runtime risk policy or agent risk ceiling.
+
+## Provider admission
+
+A task whose required provider/quality route cannot currently be resolved is rejected before execution scheduling.
+
+This prevents TITAN from creating a workflow that is known to be unable to execute under its current model configuration.
+
+Runtime retries and provider failure handling remain independent from this preflight check.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] live worker-capacity telemetry
+[ ] actual project budget reservation against concurrent workflows
+[ ] dynamic quality routing during a running workflow
+[ ] latency/reliability-aware provider routing
+[ ] provider circuit breakers
+[ ] actual-vs-estimated cost feedback loop
+[ ] historical scheduling optimization
+[ ] adaptive graph replanning
+[ ] automatic graph repair
+[ ] human approval nodes
+~~~
+
+## Next phase
+
+~~~text
+TITAN LIVE ORCHESTRATION + ADAPTIVE REPLANNING
+~~~
+
+The next layer should close the runtime feedback loop:
+
+~~~text
+Execution
+   ↓
+Live Evidence
+   ↓
+Actual Usage / Cost / Latency
+   ↓
+Evaluation
+   ↓
+Capacity + Provider State
+   ↓
+Replanning Decision
+   ↓
+Updated Task Graph
+   ↓
+Continue / Repair / Escalate
+~~~
+
+---
+
+# END OF QUALITY / COST / RISK ORCHESTRATION CHECKPOINT

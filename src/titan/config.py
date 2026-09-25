@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     model_max_input_tokens: int = 64_000
     model_max_output_tokens: int = 16_000
     model_max_cost: float = 0.0
+    orchestration_max_cost: float = 0.0
     openai_input_cost_per_1k: float = 0.0
     openai_output_cost_per_1k: float = 0.0
 
