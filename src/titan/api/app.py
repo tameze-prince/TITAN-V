@@ -768,6 +768,7 @@ async def create_and_start_workflow(
         preferred_model = str(metadata.get("model") or "local")
         provider_available = True
         estimated_cost = 0.0
+        expected_duration_ms = 0
         try:
             selection = runtime.model_router.select(
                 ModelSelectionRequest(
