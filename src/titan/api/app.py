@@ -19,6 +19,7 @@ from titan.persistence.models import (
     TaskGraphModel,
     TaskModel,
     WorkflowModel,
+    task_dependencies,
 )
 from titan.runtime.intent import IntentCompiler, IntentRepresentation
 from titan.runtime.memory import MemoryStore
@@ -638,10 +639,45 @@ async def create_and_start_workflow(
     )
     await session.commit()
 
+    requested_ids = tuple(str(task.id) for task in tasks)
+    dependency_rows = list(
+        await session.execute(
+            select(
+                task_dependencies.c.task_id,
+                task_dependencies.c.depends_on_task_id,
+            ).where(
+                task_dependencies.c.task_id.in_([task.id for task in tasks])
+            )
+        )
+    )
+    requested_id_set = set(requested_ids)
+    dependency_map: dict[str, list[str]] = {
+        task_id: []
+        for task_id in requested_ids
+    }
+    for task_id, dependency_id in dependency_rows:
+        dependency_str = str(dependency_id)
+        if dependency_str not in requested_id_set:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Task {task_id} has a dependency outside the requested "
+                    "workflow task set"
+                ),
+            )
+        dependency_map[str(task_id)].append(dependency_str)
+
     request = WorkflowInput(
         workflow_id=str(workflow.id),
         project_id=str(project_id),
-        task_ids=tuple(str(task.id) for task in tasks),
+        task_ids=requested_ids,
+        dependencies=tuple(
+            (
+                task_id,
+                tuple(sorted(dependency_map[task_id])),
+            )
+            for task_id in requested_ids
+        ),
     )
 
     try:
@@ -683,6 +719,10 @@ async def create_and_start_workflow(
             payload={
                 "temporal_workflow_id": temporal_workflow_id,
                 "task_count": len(tasks),
+                "dependency_edge_count": sum(
+                    len(items)
+                    for items in dependency_map.values()
+                ),
             },
         )
     )
