@@ -24,7 +24,7 @@ from titan.persistence.models import (
 )
 from titan.runtime.intent import IntentCompiler, IntentRepresentation
 from titan.runtime.memory import MemoryStore
-from titan.runtime.model_router import ModelBudget, ModelSelectionRequest
+from titan.runtime.model_router import BudgetExceeded, ModelBudget, ModelSelectionRequest
 from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
 from titan.runtime.scheduler import DependencyAwareScheduler, TaskScheduleError, TaskSchedulingProfile
 from titan.runtime.planning_service import persist_task_graph
@@ -751,7 +751,7 @@ async def create_and_start_workflow(
                     "output_tokens": settings.model_max_output_tokens,
                 },
             )
-        except (KeyError, LookupError, ValueError):
+        except (BudgetExceeded, KeyError, LookupError, ValueError):
             provider_available = False
 
         task_profiles.append(
