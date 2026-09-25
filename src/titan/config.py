@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     model_max_output_tokens: int = 16_000
     model_max_cost: float = 0.0
     orchestration_max_cost: float = 0.0
+    recovery_auto_enabled: bool = False
+    recovery_max_attempts: int = 2
+    recovery_min_autonomy_level: int = 3
+    recovery_max_auto_risk_level: str = "R1"
     openai_input_cost_per_1k: float = 0.0
     openai_output_cost_per_1k: float = 0.0
 
