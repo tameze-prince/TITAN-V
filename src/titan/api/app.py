@@ -597,6 +597,37 @@ async def replan_failed_workflow_endpoint(
         ],
     )
 
+@app.get(
+    "/api/v1/projects/{project_id}/recovery",
+    response_model=RecoveryMetricsResponse,
+)
+async def get_recovery_metrics(
+    project_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> RecoveryMetricsResponse:
+    project = await session.scalar(
+        select(ProjectModel).where(ProjectModel.id == project_id)
+    )
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    metrics = await collect_recovery_metrics(session, project_id=project_id)
+    return RecoveryMetricsResponse(
+        project_id=project_id,
+        started=metrics.started,
+        resolved=metrics.resolved,
+        repeated_failures=metrics.repeated_failures,
+        escalated=metrics.escalated,
+        failed_to_start=metrics.failed_to_start,
+        terminal_attempts=metrics.terminal_attempts,
+        resolved_ratio=metrics.resolved_ratio,
+        latest_outcome=metrics.latest_outcome,
+    )
+
+
 @app.post(
     "/api/v1/projects/{project_id}/tasks",
     status_code=status.HTTP_201_CREATED,
