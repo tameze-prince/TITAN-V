@@ -174,6 +174,18 @@ class ReplanResponse(BaseModel):
     reassignments: list[AgentReassignmentResponse]
 
 
+class RecoveryMetricsResponse(BaseModel):
+    project_id: UUID
+    started: int
+    resolved: int
+    repeated_failures: int
+    escalated: int
+    failed_to_start: int
+    terminal_attempts: int
+    resolved_ratio: float
+    latest_outcome: str | None
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     yield
