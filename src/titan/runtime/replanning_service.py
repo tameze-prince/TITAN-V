@@ -3,6 +3,7 @@ from collections.abc import Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from titan.persistence.models import (
     AgentModel,
@@ -46,6 +47,7 @@ async def replan_failed_workflow(
     old_tasks = list(
         await session.scalars(
             select(TaskModel)
+            .options(selectinload(TaskModel.owner_agent))
             .where(
                 TaskModel.project_id == project.id,
                 TaskModel.task_graph_id == graph.id,
