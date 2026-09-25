@@ -207,16 +207,24 @@ class DependencyAwareScheduler:
                 dependents[dependency].append(task_id)
 
         memo: dict[str, int] = {}
+        visiting: set[str] = set()
 
         def depth(task_id: str) -> int:
             if task_id in memo:
                 return memo[task_id]
+            if task_id in visiting:
+                raise TaskScheduleCycleError(
+                    f"Task dependency graph contains a cycle involving '{task_id}'"
+                )
+
+            visiting.add(task_id)
             children = dependents[task_id]
             memo[task_id] = (
                 0
                 if not children
                 else 1 + max(depth(child) for child in children)
             )
+            visiting.remove(task_id)
             return memo[task_id]
 
         for task_id in task_ids:
