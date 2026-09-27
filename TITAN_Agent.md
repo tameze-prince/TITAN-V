@@ -10422,3 +10422,86 @@ The Command Center remains a human control surface. Automated execution must rem
 ---
 
 # END OF PRODUCT CONTROL PLANE API CHECKPOINT
+
+
+---
+
+# 230. TITAN COMMAND CENTER MVP CHECKPOINT — 2026-09-27
+
+## Status
+
+The first read-oriented Command Center surface is now implemented against the Product Control Plane API.
+
+Implemented:
+
+~~~text
+[X] Next.js + TypeScript application shell
+[X] Global control-plane dashboard
+[X] Project list
+[X] Project detail view
+[X] Task/workflow status panels
+[X] Agent assignment panel
+[X] Governance / approval visibility
+[X] Recovery visibility
+[X] Explainability timeline
+[X] Recent events view
+[X] Artifact view
+[X] Server-side TITAN Core API integration
+[X] Local development environment template
+~~~
+
+Technology baseline:
+
+~~~text
+Next.js 16
+TypeScript
+React 19
+Server-side API consumption through TITAN_API_URL
+~~~
+
+The Command Center remains intentionally read-oriented in this milestone. It provides human visibility without introducing a second orchestration path.
+
+## Not yet implemented
+
+~~~text
+[ ] Authentication
+[ ] RBAC
+[ ] Live streaming / SSE
+[ ] Approval actions
+[ ] Recovery / rollback actions
+[ ] Task graph visual editor
+[ ] Agent management
+[ ] Artifact download / preview
+[ ] Cross-project search and filtering
+[ ] Frontend build CI
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN COMMAND CENTER INTERACTION + GOVERNED ACTIONS
+~~~
+
+The next layer should add:
+
+~~~text
+Human
+  ↓
+Command Center
+  ↓
+Authenticated API
+  ↓
+Policy / Permission Check
+  ↓
+Governed Action
+  ↓
+Workflow / Recovery Runtime
+  ↓
+Event + Explainability
+  ↓
+Command Center
+~~~
+
+---
+
+# END OF COMMAND CENTER MVP CHECKPOINT
