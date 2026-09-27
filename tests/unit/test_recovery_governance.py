@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from titan.api.app import RecoveryDecisionRequest, RecoveryRollbackRequest
 from titan.runtime.recovery_service import RecoveryStartResult
@@ -27,7 +28,7 @@ def test_recovery_decision_request_allows_rejection_without_strategy() -> None:
 
 
 def test_recovery_rollback_request_requires_a_reason() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         RecoveryRollbackRequest(reason="")
 
     request = RecoveryRollbackRequest(reason="Recovery produced an invalid result")
