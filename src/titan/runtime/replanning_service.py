@@ -28,6 +28,8 @@ async def replan_failed_workflow(
     workflow: WorkflowModel,
     capability_registry: CapabilityRegistry,
     contracts: Sequence[AgentContract],
+    allow_reassignment: bool = True,
+    recovery_strategy: str = "REPLAN_REASSIGN",
 ) -> tuple[TaskGraphModel, tuple[TaskModel, ...], ReplanDecision]:
     if workflow.project_id != project.id:
         raise ValueError("Workflow does not belong to project")
@@ -104,6 +106,7 @@ async def replan_failed_workflow(
         ),
         failed_task_ids=failed_tasks,
         task_metadata=task_metadata,
+        allow_reassignment=allow_reassignment,
     )
 
     version = await session.scalar(
@@ -136,6 +139,7 @@ async def replan_failed_workflow(
     plan_json["version"] = next_version
     plan_json["name"] = f"Adaptive replan of {graph.name}"
     plan_json["replan"] = {
+        "strategy": recovery_strategy,
         "source_graph_id": str(graph.id),
         "source_graph_version": graph.version,
         "failed_task_ids": list(decision.failed_task_ids),
@@ -295,6 +299,7 @@ async def replan_failed_workflow(
                 }
                 for item in decision.reassignments
             ],
+            "strategy": recovery_strategy,
         },
     )
 
@@ -320,6 +325,7 @@ async def replan_failed_workflow(
                     for item in decision.reassignments
                 ],
                 "rationale": decision.rationale,
+                "strategy": recovery_strategy,
             },
         )
     )
