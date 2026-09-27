@@ -10332,3 +10332,93 @@ Operator / Human Control Surface
 ---
 
 # END OF EXECUTION OBSERVABILITY + EXPLAINABILITY CHECKPOINT
+
+
+---
+
+# 229. TITAN PRODUCT CONTROL PLANE API CHECKPOINT — 2026-09-27
+
+## Status
+
+The first operator-facing control-plane API is now implemented on top of the existing durable runtime.
+
+Implemented:
+
+~~~text
+[X] Global control-plane overview
+[X] Project control-plane listing
+[X] Project operator overview endpoint
+[X] Project state exposure
+[X] Task status aggregation
+[X] Workflow status aggregation
+[X] Agent summary
+[X] Artifact summary
+[X] Governance decision feed
+[X] Pending human-decision count
+[X] Pending task-approval count
+[X] Recent event feed
+[X] Explainability trace feed
+[X] Recovery metrics
+[X] Latest task-graph summary
+[X] Integration coverage
+~~~
+
+The new operator API is exposed under:
+
+~~~text
+/api/v1/control-plane
+~~~
+
+Primary endpoints:
+
+~~~text
+GET /api/v1/control-plane/overview
+GET /api/v1/control-plane/projects
+GET /api/v1/control-plane/projects/{project_id}
+~~~
+
+## Architectural boundary
+
+The API is intentionally read-oriented.
+
+It does not duplicate orchestration logic, recovery policy, governance policy or runtime execution. It aggregates durable control-plane state produced by the existing TITAN subsystems and exposes it as a stable surface for the Command Center.
+
+## Not yet implemented
+
+~~~text
+[ ] Next.js + TypeScript Command Center
+[ ] Live streaming / SSE operator updates
+[ ] Authentication and RBAC enforcement
+[ ] Operator mutation surface for approvals
+[ ] Operator mutation surface for recovery / rollback
+[ ] Paginated activity and artifact feeds
+[ ] Cross-project filtering and search
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN COMMAND CENTER MVP
+~~~
+
+The frontend will consume the control-plane API and expose:
+
+~~~text
+Projects
+  ↓
+Project Overview
+  ├── Objective / phase / autonomy
+  ├── Task & workflow state
+  ├── Active agents
+  ├── Artifacts
+  ├── Governance / approvals
+  ├── Recovery
+  ├── Explainability
+  └── Recent events
+~~~
+
+The Command Center remains a human control surface. Automated execution must remain governed by the existing policy, workflow and recovery boundaries.
+
+---
+
+# END OF PRODUCT CONTROL PLANE API CHECKPOINT
