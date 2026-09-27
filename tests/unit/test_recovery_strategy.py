@@ -1,6 +1,7 @@
 from titan.runtime.recovery_strategy import (
     FailureCategory,
     RecoveryObservation,
+    observations_from_events,
     RecoveryStrategy,
     RecoveryStrategySelector,
     classify_failure,
@@ -79,3 +80,47 @@ def test_unrelated_failure_categories_do_not_change_selection() -> None:
     )
 
     assert selection.strategy == RecoveryStrategy.REPLAN_REASSIGN
+
+
+def test_selector_penalizes_expensive_and_slow_recovery_strategies() -> None:
+    observations = (
+        RecoveryObservation(
+            category=FailureCategory.TOOL,
+            strategy=RecoveryStrategy.REPLAN_REASSIGN,
+            outcome="RESOLVED",
+            actual_cost=1.0,
+            duration_ms=100,
+        ),
+        RecoveryObservation(
+            category=FailureCategory.TOOL,
+            strategy=RecoveryStrategy.REPLAN_SAME_AGENT,
+            outcome="RESOLVED",
+            actual_cost=100.0,
+            duration_ms=10_000,
+        ),
+    )
+
+    selection = RecoveryStrategySelector().select(
+        category=FailureCategory.TOOL,
+        observations=observations,
+    )
+
+    assert selection.strategy == RecoveryStrategy.REPLAN_REASSIGN
+
+
+def test_observation_event_parser_reads_strategy_cost_and_duration() -> None:
+    class Event:
+        type = "RecoveryResolved"
+        payload = {
+            "failure_category": "BUDGET",
+            "strategy": "REPLAN_REASSIGN",
+            "actual_cost": 1.25,
+            "duration_ms": 1200,
+        }
+
+    observations = observations_from_events((Event(),))
+
+    assert observations[0].category == FailureCategory.BUDGET
+    assert observations[0].strategy == RecoveryStrategy.REPLAN_REASSIGN
+    assert observations[0].actual_cost == 1.25
+    assert observations[0].duration_ms == 1200
