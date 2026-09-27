@@ -25,6 +25,7 @@ from titan.persistence.models import (
     WorkflowModel,
     task_dependencies,
 )
+from titan.runtime.explainability import build_project_explainability_trace
 from titan.runtime.intent import IntentCompiler, IntentRepresentation
 from titan.runtime.memory import MemoryStore
 from titan.runtime.policy_store import PolicyDefinition, PolicyVersionStore
