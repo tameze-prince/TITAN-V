@@ -10505,3 +10505,109 @@ Command Center
 ---
 
 # END OF COMMAND CENTER MVP CHECKPOINT
+
+
+---
+
+# 231. TITAN COMMAND CENTER GOVERNED ACTIONS CHECKPOINT — 2026-09-27
+
+## Status
+
+The Command Center now has a first governed mutation path for operator-controlled recovery.
+
+Implemented:
+
+~~~text
+[X] Operator identity boundary
+[X] Configurable bearer-token authentication
+[X] Development-local operator mode
+[X] Recovery approval / rejection audit identity
+[X] Recovery rollback audit identity
+[X] Control-plane recovery action discovery
+[X] Command Center recovery action buttons
+[X] Server-side Next.js API proxy for operator actions
+[X] Integration coverage for pending governed actions
+[X] Unit coverage for operator authentication
+~~~
+
+Runtime path:
+
+~~~text
+Operator
+  ↓
+Command Center
+  ↓
+Next.js server proxy
+  ↓
+Bearer token
+  ↓
+TITAN FastAPI
+  ↓
+Operator authentication
+  ↓
+Existing recovery governance/runtime
+  ↓
+Durable event
+  ↓
+Explainability / control plane
+~~~
+
+## Security boundary
+
+The current implementation intentionally uses a configurable bearer token as the first operator API authentication adapter.
+
+Development:
+
+~~~text
+TITAN_ENV=development
+TITAN_OPERATOR_AUTH_REQUIRED=false
+~~~
+
+Production/staging should require:
+
+~~~text
+TITAN_OPERATOR_AUTH_REQUIRED=true
+TITAN_OPERATOR_API_TOKEN=<strong secret>
+~~~
+
+This is an interim operator credential boundary, not the final OIDC/RBAC implementation defined by the architecture.
+
+## Not yet implemented
+
+~~~text
+[ ] OIDC login
+[ ] user/session persistence
+[ ] fine-grained RBAC permissions
+[ ] approval records independent of recovery events
+[ ] task approval workflow
+[ ] Temporal-native human wait / resume
+[ ] live SSE updates
+[ ] authenticated frontend session
+[ ] CSRF strategy for browser sessions
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN IDENTITY + REAL-TIME CONTROL PLANE
+~~~
+
+The next layer should replace the interim operator token with OIDC-compatible identity and add live event streaming:
+
+~~~text
+Identity Provider
+      ↓
+User Session
+      ↓
+RBAC / Permissions
+      ↓
+Command Center
+      ↕
+SSE / Event Stream
+      ↕
+TITAN Event Log
+~~~
+
+---
+
+# END OF GOVERNED ACTIONS CHECKPOINT
