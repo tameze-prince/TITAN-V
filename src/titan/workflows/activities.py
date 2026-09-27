@@ -24,6 +24,11 @@ from titan.runtime.contracts import AgentTaskContext
 from titan.runtime.evaluation_service import EvaluationCheck, EvaluationEngine
 from titan.runtime.memory import MemoryStore
 from titan.runtime.repair import AgentEvaluationFailure
+from titan.runtime.recovery_strategy import (
+    RecoveryStrategySelector,
+    classify_failure,
+    observations_from_events,
+)
 from titan.runtime.service import get_agent_runtime
 
 
@@ -499,6 +504,8 @@ async def mark_workflow_completed(
                         "source_workflow_id": source_workflow_id,
                         "recovery_attempt": recovery_attempt,
                         "recovery_root_workflow_id": recovery_root_workflow_id,
+                        "failure_category": recovery_payload.get("failure_category"),
+                        "strategy": recovery_payload.get("strategy"),
                         "completed_task_count": len(completed_task_ids),
                         "preserved_task_count": precompleted_count,
                         "reexecuted_task_count": reexecuted_count,
@@ -608,6 +615,9 @@ async def mark_workflow_failed(
                         "recovery_root_workflow_id": recovery_payload.get(
                             "recovery_root_workflow_id"
                         ),
+                        "failure_category": recovery_payload.get("failure_category"),
+                        "strategy": recovery_payload.get("strategy"),
+                        "failure_category": recovery_category.value,
                         "error_message": error_message,
                     },
                 )
@@ -741,6 +751,57 @@ async def attempt_automatic_recovery(
             await session.commit()
             return f"ESCALATED:{assessment.reason}"
 
+        recovery_category = classify_failure(error_message)
+        history_events = list(
+            await session.scalars(
+                select(EventModel)
+                .where(
+                    EventModel.project_id == project.id,
+                    EventModel.type.in_(
+                        (
+                            "RecoveryStarted",
+                            "RecoveryResolved",
+                            "RecoveryRepeatedFailure",
+                            "RecoveryEscalated",
+                            "RecoveryFailed",
+                        )
+                    ),
+                )
+                .order_by(EventModel.occurred_at.desc())
+                .limit(50)
+            )
+        )
+        observations = observations_from_events(history_events)
+        strategy_selection = RecoveryStrategySelector().select(
+            category=recovery_category,
+            observations=observations,
+        )
+
+        session.add(
+            EventModel(
+                project_id=project.id,
+                type="RecoveryStrategySelected",
+                actor_type="SYSTEM",
+                aggregate_type="WORKFLOW",
+                aggregate_id=workflow.id,
+                payload={
+                    "run_id": str(run_uuid),
+                    "failure_category": recovery_category.value,
+                    "strategy": strategy_selection.strategy.value,
+                    "score": strategy_selection.score,
+                    "reason": strategy_selection.reason,
+                    "historical_observation_count": len(
+                        [
+                            observation
+                            for observation in observations
+                            if observation.category == recovery_category
+                        ]
+                    ),
+                },
+            )
+        )
+        await session.flush()
+
         runtime = get_agent_runtime()
         recovery_root = (
             str((prior_recovery_event.payload or {}).get("recovery_root_workflow_id"))
@@ -756,6 +817,10 @@ async def attempt_automatic_recovery(
                 workflow=workflow,
                 capability_registry=runtime.capabilities,
                 contracts=runtime.contracts.all(),
+                allow_reassignment=(
+                    strategy_selection.strategy.value == "REPLAN_REASSIGN"
+                ),
+                recovery_strategy=strategy_selection.strategy.value,
             )
             replacement = WorkflowModel(
                 project_id=project.id,
@@ -816,6 +881,8 @@ async def attempt_automatic_recovery(
                         "source_run_id": run_id,
                         "recovery_attempt": assessment.next_attempt,
                         "recovery_root_workflow_id": recovery_root,
+                        "failure_category": recovery_category.value,
+                        "strategy": strategy_selection.strategy.value,
                         "task_graph_id": str(graph.id),
                         "failed_task_ids": list(decision.failed_task_ids),
                         "impacted_task_ids": list(decision.impacted_task_ids),
@@ -835,6 +902,8 @@ async def attempt_automatic_recovery(
                         "replacement_workflow_id": str(replacement.id),
                         "replacement_task_graph_id": str(graph.id),
                         "recovery_attempt": assessment.next_attempt,
+                        "failure_category": recovery_category.value,
+                        "strategy": strategy_selection.strategy.value,
                         "precompleted_task_count": len(precompleted),
                     },
                 )
@@ -862,6 +931,8 @@ async def attempt_automatic_recovery(
                     aggregate_id=workflow.id,
                     payload={
                         "recovery_attempt": assessment.next_attempt,
+                        "failure_category": recovery_category.value,
+                        "strategy": strategy_selection.strategy.value,
                         "error_type": type(exc).__name__,
                         "error_message": str(exc),
                     },
