@@ -23,6 +23,7 @@ from titan.persistence.models import (
 from titan.runtime.contracts import AgentTaskContext
 from titan.runtime.evaluation_service import EvaluationCheck, EvaluationEngine
 from titan.runtime.governance import GovernanceEngine
+from titan.runtime.governance_audit import record_governance_decision
 from titan.runtime.memory import MemoryStore
 from titan.runtime.repair import AgentEvaluationFailure
 from titan.runtime.recovery_strategy import (
@@ -797,6 +798,18 @@ async def attempt_automatic_recovery(
             (
                 governance.check_recovery(assessment),
             )
+        )
+        await record_governance_decision(
+            session,
+            decision=recovery_governance,
+            domain="RECOVERY",
+            project_id=project.id,
+            workflow_id=workflow.id,
+            context={
+                "recovery_attempt": assessment.next_attempt,
+                "error_message": error_message,
+                "failed_task_count": len(failed_tasks),
+            },
         )
 
         if not recovery_governance.allowed:
