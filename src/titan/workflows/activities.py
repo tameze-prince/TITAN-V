@@ -615,9 +615,11 @@ async def mark_workflow_failed(
                         "recovery_root_workflow_id": recovery_payload.get(
                             "recovery_root_workflow_id"
                         ),
-                        "failure_category": recovery_payload.get("failure_category"),
+                        "failure_category": (
+                            recovery_payload.get("failure_category")
+                            or classify_failure(error_message).value
+                        ),
                         "strategy": recovery_payload.get("strategy"),
-                        "failure_category": recovery_category.value,
                         "error_message": error_message,
                     },
                 )
