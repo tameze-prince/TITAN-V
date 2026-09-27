@@ -226,3 +226,31 @@ def test_scheduler_rejects_duplicate_tasks() -> None:
 
     with pytest.raises(TaskScheduleError, match="Duplicate"):
         scheduler.build(("a", "a"))
+
+
+def test_scheduler_preserves_precompleted_tasks() -> None:
+    scheduler = DependencyAwareScheduler()
+
+    schedule = scheduler.build(
+        ("a", "b", "c"),
+        (
+            ("b", ("a",)),
+            ("c", ("b",)),
+        ),
+        precompleted_task_ids=("a",),
+    )
+
+    assert schedule.waves == (
+        ("b",),
+        ("c",),
+    )
+
+
+def test_scheduler_rejects_unknown_precompleted_task() -> None:
+    scheduler = DependencyAwareScheduler()
+
+    with pytest.raises(TaskScheduleError, match="not part of the workflow"):
+        scheduler.build(
+            ("a",),
+            precompleted_task_ids=("missing",),
+        )

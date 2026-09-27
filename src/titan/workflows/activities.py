@@ -11,6 +11,7 @@ from titan.persistence.models import (
     ArtifactModel,
     EvaluationModel,
     EventModel,
+    ProjectModel,
     ProjectStateModel,
     RepairAttemptModel,
     RunModel,
@@ -525,3 +526,258 @@ async def mark_workflow_failed(
             )
         )
         await session.commit()
+
+
+@activity.defn
+async def attempt_automatic_recovery(
+    workflow_id: str,
+    run_id: str,
+    error_message: str,
+) -> str:
+    workflow_uuid = UUID(workflow_id)
+    run_uuid = UUID(run_id)
+
+    from titan.config import settings
+    from titan.integrations.temporal.client import get_temporal_client
+    from titan.runtime.recovery import RecoveryPolicy
+    from titan.runtime.replanning_service import replan_failed_workflow
+    from titan.runtime.service import get_agent_runtime
+    from titan.workflows.runtime import TitanWorkflow
+    from titan.workflows.service import build_workflow_input
+
+    async with SessionFactory() as session:
+        workflow = await session.scalar(
+            select(WorkflowModel).where(WorkflowModel.id == workflow_uuid)
+        )
+        if workflow is None:
+            return "ESCALATED:workflow_not_found"
+
+        project = await session.scalar(
+            select(ProjectModel).where(ProjectModel.id == workflow.project_id)
+        )
+        if project is None:
+            return "ESCALATED:project_not_found"
+
+        tasks = list(
+            await session.scalars(
+                select(TaskModel).where(
+                    TaskModel.project_id == project.id,
+                    TaskModel.workflow_id == workflow.id,
+                )
+            )
+        )
+        failed_tasks = [
+            task
+            for task in tasks
+            if task.status in {"FAILED", "REPAIRING", "RETRYING", "BLOCKED"}
+        ]
+        if not failed_tasks:
+            session.add(
+                EventModel(
+                    project_id=project.id,
+                    type="RecoveryEscalated",
+                    actor_type="SYSTEM",
+                    aggregate_type="WORKFLOW",
+                    aggregate_id=workflow.id,
+                    payload={
+                        "run_id": str(run_uuid),
+                        "reason": "No failed or blocked tasks were found for recovery",
+                        "error_message": error_message,
+                    },
+                )
+            )
+            await session.commit()
+            return "ESCALATED:no_failed_tasks"
+
+        prior_recovery_event = await session.scalar(
+            select(EventModel)
+            .where(
+                EventModel.aggregate_type == "WORKFLOW",
+                EventModel.aggregate_id == workflow.id,
+                EventModel.type == "WorkflowRecoveryStarted",
+            )
+            .order_by(EventModel.occurred_at.desc())
+            .limit(1)
+        )
+        current_attempt = int(
+            (prior_recovery_event.payload or {}).get("recovery_attempt", 0)
+        ) if prior_recovery_event is not None else 0
+
+        failed_risks = tuple(task.risk_level for task in failed_tasks)
+        approval_required = any(
+            task.approval_requirement not in {"NONE", ""}
+            for task in failed_tasks
+        )
+        policy = RecoveryPolicy(
+            enabled=settings.recovery_auto_enabled,
+            max_attempts=settings.recovery_max_attempts,
+            min_autonomy_level=settings.recovery_min_autonomy_level,
+            max_auto_risk_level=settings.recovery_max_auto_risk_level,
+        )
+        assessment = policy.assess(
+            autonomy_level=project.autonomy_level,
+            current_attempt=current_attempt,
+            failed_risk_levels=failed_risks,
+            approval_required=approval_required,
+        )
+
+        if assessment.action != "AUTO_RECOVER":
+            state = await session.scalar(
+                select(ProjectStateModel).where(
+                    ProjectStateModel.project_id == project.id
+                )
+            )
+            if state is not None:
+                state.status = "WAITING_HUMAN"
+                state.phase = "RECOVERY_ESCALATED"
+                state.version += 1
+
+            session.add(
+                EventModel(
+                    project_id=project.id,
+                    type="RecoveryEscalated",
+                    actor_type="SYSTEM",
+                    aggregate_type="WORKFLOW",
+                    aggregate_id=workflow.id,
+                    payload={
+                        "run_id": str(run_uuid),
+                        "reason": assessment.reason,
+                        "current_attempt": current_attempt,
+                        "max_attempts": assessment.max_attempts,
+                        "failed_task_ids": [str(task.id) for task in failed_tasks],
+                        "failed_risk_levels": list(failed_risks),
+                        "error_message": error_message,
+                    },
+                )
+            )
+            await session.commit()
+            return f"ESCALATED:{assessment.reason}"
+
+        runtime = get_agent_runtime()
+        recovery_root = (
+            str((prior_recovery_event.payload or {}).get("recovery_root_workflow_id"))
+            if prior_recovery_event is not None
+            and (prior_recovery_event.payload or {}).get("recovery_root_workflow_id")
+            else workflow_id
+        )
+
+        try:
+            graph, new_tasks, decision = await replan_failed_workflow(
+                session,
+                project=project,
+                workflow=workflow,
+                capability_registry=runtime.capabilities,
+                contracts=runtime.contracts.all(),
+            )
+            replacement = WorkflowModel(
+                project_id=project.id,
+                task_graph_id=graph.id,
+                name=f"Recovery {assessment.next_attempt} for {workflow.name}",
+                workflow_type="RECOVERY",
+                status="STARTING",
+            )
+            session.add(replacement)
+            await session.flush()
+
+            for task in new_tasks:
+                if task.workflow_id is not None:
+                    raise ValueError(
+                        f"Recovery task {task.id} is already assigned to a workflow"
+                    )
+                task.workflow_id = replacement.id
+
+            graph.status = "RUNNING"
+            temporal_workflow_id = (
+                f"titan-recovery-{workflow.id}-{assessment.next_attempt}-{replacement.id}"
+            )
+            replacement.temporal_workflow_id = temporal_workflow_id
+
+            precompleted = tuple(
+                str(task.id)
+                for task in new_tasks
+                if task.status == "COMPLETED"
+            )
+
+            request = await build_workflow_input(
+                session,
+                project=project,
+                workflow=replacement,
+                tasks=list(new_tasks),
+                runtime=runtime,
+                precompleted_task_ids=precompleted,
+                recovery_attempt=assessment.next_attempt,
+                recovery_root_workflow_id=recovery_root,
+            )
+            temporal_client = await get_temporal_client()
+            await temporal_client.start_workflow(
+                TitanWorkflow.run,
+                request,
+                id=temporal_workflow_id,
+                task_queue=settings.temporal_task_queue,
+            )
+
+            session.add(
+                EventModel(
+                    project_id=project.id,
+                    type="WorkflowRecoveryStarted",
+                    actor_type="SYSTEM",
+                    aggregate_type="WORKFLOW",
+                    aggregate_id=replacement.id,
+                    payload={
+                        "source_workflow_id": workflow_id,
+                        "source_run_id": run_id,
+                        "recovery_attempt": assessment.next_attempt,
+                        "recovery_root_workflow_id": recovery_root,
+                        "task_graph_id": str(graph.id),
+                        "failed_task_ids": list(decision.failed_task_ids),
+                        "impacted_task_ids": list(decision.impacted_task_ids),
+                        "reassigned_task_count": len(decision.reassignments),
+                        "precompleted_task_count": len(precompleted),
+                    },
+                )
+            )
+            session.add(
+                EventModel(
+                    project_id=project.id,
+                    type="RecoveryStarted",
+                    actor_type="SYSTEM",
+                    aggregate_type="WORKFLOW",
+                    aggregate_id=workflow.id,
+                    payload={
+                        "replacement_workflow_id": str(replacement.id),
+                        "replacement_task_graph_id": str(graph.id),
+                        "recovery_attempt": assessment.next_attempt,
+                        "precompleted_task_count": len(precompleted),
+                    },
+                )
+            )
+            state = await session.scalar(
+                select(ProjectStateModel).where(
+                    ProjectStateModel.project_id == project.id
+                )
+            )
+            if state is not None:
+                state.status = "RUNNING"
+                state.phase = "RECOVERY_EXECUTION"
+                state.version += 1
+
+            await session.commit()
+            return f"STARTED:{replacement.id}"
+        except Exception as exc:
+            await session.rollback()
+            session.add(
+                EventModel(
+                    project_id=project.id,
+                    type="RecoveryFailed",
+                    actor_type="SYSTEM",
+                    aggregate_type="WORKFLOW",
+                    aggregate_id=workflow.id,
+                    payload={
+                        "recovery_attempt": assessment.next_attempt,
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc),
+                    },
+                )
+            )
+            await session.commit()
+            return f"FAILED:{type(exc).__name__}:{exc}"

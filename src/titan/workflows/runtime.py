@@ -13,6 +13,7 @@ with workflow.unsafe.imports_passed_through():
         mark_workflow_failed,
         mark_workflow_started,
         orchestrate_task,
+        attempt_automatic_recovery,
     )
 
 
@@ -37,7 +38,7 @@ class TitanWorkflow:
             retry_policy=RETRY_POLICY,
         )
 
-        completed_task_ids: list[str] = []
+        completed_task_ids: list[str] = list(request.precompleted_task_ids)
         schedule = DependencyAwareScheduler().build(
             request.task_ids,
             request.dependencies,
@@ -56,6 +57,7 @@ class TitanWorkflow:
                 for profile in request.task_profiles
             ),
             max_project_cost=request.max_project_cost,
+            precompleted_task_ids=request.precompleted_task_ids,
         )
 
         try:
@@ -95,7 +97,11 @@ class TitanWorkflow:
             return WorkflowResult(
                 workflow_id=request.workflow_id,
                 status="COMPLETED",
-                completed_task_ids=tuple(completed_task_ids),
+                completed_task_ids=tuple(
+                    task_id
+                    for task_id in request.task_ids
+                    if task_id in set(completed_task_ids)
+                ),
                 execution_waves=schedule.waves,
                 estimated_schedule_cost=schedule.estimated_cost,
                 estimated_makespan_ms=schedule.estimated_makespan_ms,
@@ -106,6 +112,12 @@ class TitanWorkflow:
                 mark_workflow_failed,
                 args=(request.workflow_id, run_id, str(exc)),
                 start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=RETRY_POLICY,
+            )
+            await workflow.execute_activity(
+                attempt_automatic_recovery,
+                args=(request.workflow_id, run_id, str(exc)),
+                start_to_close_timeout=timedelta(seconds=120),
                 retry_policy=RETRY_POLICY,
             )
             raise

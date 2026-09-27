@@ -34,6 +34,15 @@ async def fake_mark_workflow_completed(
     return None
 
 
+@activity.defn(name="attempt_automatic_recovery")
+async def fake_attempt_automatic_recovery(
+    workflow_id: str,
+    run_id: str,
+    error_message: str,
+) -> str:
+    return "ESCALATED:test"
+
+
 @activity.defn(name="mark_workflow_failed")
 async def fake_mark_workflow_failed(
     workflow_id: str,
@@ -64,6 +73,7 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
             fake_orchestrate_task,
             fake_mark_workflow_completed,
             fake_mark_workflow_failed,
+            fake_attempt_automatic_recovery,
         ],
     ):
         task_a = str(uuid4())
@@ -117,6 +127,7 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
                 ),
             ),
             max_project_cost=10.0,
+            precompleted_task_ids=(task_a,),
         )
         result = await asyncio.wait_for(
             client.execute_workflow(
@@ -131,14 +142,13 @@ async def test_titan_workflow_orchestrates_tasks() -> None:
     assert result.status == "COMPLETED"
     assert result.completed_task_ids == (
         task_a,
-        task_d,
         task_b,
         task_c,
+        task_d,
     )
     assert result.execution_waves == (
-        (task_a, task_d),
-        (task_b,),
+        (task_b, task_d),
         (task_c,),
     )
-    assert result.estimated_schedule_cost == 4.5
-    assert result.estimated_makespan_ms == 350
+    assert result.estimated_schedule_cost == 3.5
+    assert result.estimated_makespan_ms == 500

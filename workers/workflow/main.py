@@ -9,6 +9,7 @@ from titan.workflows.activities import (
     mark_workflow_completed,
     mark_workflow_failed,
     mark_workflow_started,
+    attempt_automatic_recovery,
     orchestrate_task,
 )
 from titan.workflows.runtime import TitanWorkflow
@@ -34,6 +35,7 @@ async def main() -> None:
             orchestrate_task,
             mark_workflow_completed,
             mark_workflow_failed,
+            attempt_automatic_recovery,
         ],
     )
 

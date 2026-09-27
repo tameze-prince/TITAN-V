@@ -58,10 +58,16 @@ class DependencyAwareScheduler:
         agent_capacities: tuple[tuple[str, int], ...] = (),
         task_profiles: tuple[TaskSchedulingProfile, ...] = (),
         max_project_cost: float = 0.0,
+        precompleted_task_ids: tuple[str, ...] = (),
     ) -> TaskSchedule:
         unique_task_ids = self._normalize_task_ids(task_ids)
         if max_project_cost < 0:
             raise TaskScheduleError("Project scheduling cost budget cannot be negative")
+
+        precompleted = self._normalize_precompleted(
+            unique_task_ids,
+            precompleted_task_ids,
+        )
 
         dependency_map = self._normalize_dependencies(
             unique_task_ids,
@@ -84,8 +90,8 @@ class DependencyAwareScheduler:
 
         critical_path = self._critical_path_lengths(unique_task_ids, dependency_map)
         position = {task_id: index for index, task_id in enumerate(unique_task_ids)}
-        completed: set[str] = set()
-        remaining = set(unique_task_ids)
+        completed: set[str] = set(precompleted)
+        remaining = set(unique_task_ids).difference(precompleted)
         waves: list[tuple[str, ...]] = []
         estimated_cost = 0.0
         estimated_makespan_ms = 0
@@ -166,6 +172,27 @@ class DependencyAwareScheduler:
             estimated_cost=round(estimated_cost, 10),
             estimated_makespan_ms=estimated_makespan_ms,
         )
+
+    @staticmethod
+    def _normalize_precompleted(
+        task_ids: tuple[str, ...],
+        precompleted_task_ids: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        task_set = set(task_ids)
+        result: list[str] = []
+        seen: set[str] = set()
+        for task_id in precompleted_task_ids:
+            if task_id not in task_set:
+                raise TaskScheduleError(
+                    f"Precompleted task '{task_id}' is not part of the workflow"
+                )
+            if task_id in seen:
+                raise TaskScheduleError(
+                    f"Duplicate precompleted task identifier '{task_id}'"
+                )
+            seen.add(task_id)
+            result.append(task_id)
+        return tuple(result)
 
     @staticmethod
     def _normalize_task_ids(task_ids: tuple[str, ...]) -> tuple[str, ...]:
