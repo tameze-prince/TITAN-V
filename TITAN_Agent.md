@@ -10123,3 +10123,117 @@ Future Policy Revisions
 ---
 
 # END OF UNIFIED POLICY ENGINE + EXECUTION GOVERNANCE CHECKPOINT
+
+---
+
+# 227. TITAN GOVERNANCE CONTROL PLANE + POLICY VERSIONING CHECKPOINT — 2026-09-27
+
+## Status
+
+TITAN now has durable policy definitions and an auditable governance-decision control plane.
+
+Implemented:
+
+~~~text
+[X] Policy definition schema
+[X] GLOBAL / PROJECT / AGENT policy scopes
+[X] Durable policy versions
+[X] Policy activation / supersession
+[X] Effective policy resolution by scope precedence
+[X] Durable governance decision records
+[X] Policy management API
+[X] Governance decision history API
+[X] Automatic recovery governance decision audit
+[X] Policy control-plane migration 0006
+[X] Policy control-plane tests
+~~~
+
+## Policy lifecycle
+
+~~~text
+Policy Definition
+      ↓
+Policy Version
+      ↓
+DRAFT / ACTIVE
+      ↓
+SUPERSEDED
+~~~
+
+Version creation is deterministic within a policy scope.
+
+Active policy precedence is:
+
+~~~text
+AGENT
+  ↓
+PROJECT
+  ↓
+GLOBAL
+~~~
+
+If a more specific policy is absent, the effective policy resolver falls back to the broader scope.
+
+## Governance audit
+
+Governance decisions now have a durable record containing:
+
+~~~text
+project
+workflow
+task
+policy version
+domain
+action
+allowed
+human requirement
+reason
+checks
+context
+timestamp
+~~~
+
+This allows TITAN to explain why a recovery or execution decision was permitted, denied, or escalated.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] authentication / authorization for policy administration
+[ ] policy signatures
+[ ] policy approval workflow
+[ ] policy simulation / dry-run
+[ ] cross-project organization policy inheritance
+[ ] policy rollback UI
+[ ] immutable append-only audit storage
+[ ] external compliance export
+~~~
+
+## Next phase
+
+~~~text
+TITAN EXECUTION OBSERVABILITY + EXPLAINABILITY
+~~~
+
+The next layer should connect governance, runtime evidence and product observability:
+
+~~~text
+Intent
+  ↓
+Plan
+  ↓
+Governance
+  ↓
+Execution
+  ↓
+Evaluation
+  ↓
+Recovery / Rollback
+  ↓
+Durable Explainability Trace
+~~~
+
+---
+
+# END OF GOVERNANCE CONTROL PLANE + POLICY VERSIONING CHECKPOINT
