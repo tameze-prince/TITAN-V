@@ -18,6 +18,7 @@ from titan.persistence.models import (
     GovernanceDecisionModel,
     IntentRecordModel,
     ProjectModel,
+    PolicyVersionModel,
     ProjectStateModel,
     TaskGraphModel,
     TaskModel,
