@@ -64,7 +64,7 @@ class PolicyVersionResponse(BaseModel):
     policy_name: str
     version: int
     status: str
-    definition: dict
+    definition_json: dict
     created_by: str
 
     model_config = {"from_attributes": True}
@@ -81,8 +81,8 @@ class GovernanceDecisionResponse(BaseModel):
     allowed: bool
     requires_human: bool
     reason: str
-    checks: list
-    context: dict
+    checks_json: list
+    context_json: dict
 
     model_config = {"from_attributes": True}
 
