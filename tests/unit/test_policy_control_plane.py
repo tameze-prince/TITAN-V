@@ -27,3 +27,36 @@ def test_policy_definition_rejects_negative_budget() -> None:
 
 def test_policy_store_is_importable() -> None:
     assert PolicyVersionStore is not None
+
+
+@pytest.mark.asyncio
+async def test_policy_store_rejects_invalid_scopes_without_database_access() -> None:
+    store = PolicyVersionStore()
+
+    with pytest.raises(ValueError, match="Global policies"):
+        await store.create(
+            None,
+            policy_name="default",
+            scope_type="GLOBAL",
+            scope_id="00000000-0000-0000-0000-000000000000",
+        )
+
+    with pytest.raises(ValueError, match="require a scope id"):
+        await store.create(
+            None,
+            policy_name="project-policy",
+            scope_type="PROJECT",
+        )
+
+
+def test_policy_api_contracts_import_cleanly() -> None:
+    from titan.api.app import (
+        GovernanceDecisionResponse,
+        PolicyCreateRequest,
+        PolicyVersionResponse,
+    )
+
+    request = PolicyCreateRequest(policy_name="execution")
+    assert request.scope_type == "GLOBAL"
+    assert PolicyVersionResponse is not None
+    assert GovernanceDecisionResponse is not None
