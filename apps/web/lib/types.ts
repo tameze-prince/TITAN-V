@@ -57,6 +57,16 @@ export type ProjectOverview = {
     media_type: string;
     created_at: string;
   }>;
+  recovery_actions: Array<{
+    workflow_id: string;
+    workflow_name: string;
+    workflow_type: string;
+    workflow_status: string;
+    action: string;
+    reason: string;
+    current_attempt: number | null;
+    failure_category: string | null;
+  }>;
   governance_decisions: Array<{
     id: string;
     action: string;
