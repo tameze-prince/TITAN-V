@@ -9808,3 +9808,97 @@ Recover / Rollback / Escalate
 ---
 
 # END OF STRATEGY LEARNING + ADAPTIVE RECOVERY CHECKPOINT
+
+---
+
+# 224. TITAN RECOVERY OPTIMIZATION CHECKPOINT — 2026-09-27
+
+## Status
+
+TITAN now feeds actual recovery cost and latency into future bounded strategy selection.
+
+Implemented:
+
+~~~text
+[X] Recovery actual-cost capture
+[X] Recovery duration capture
+[X] Strategy cost/latency observations
+[X] Strategy scoring with recovery outcome + cost + latency
+[X] Recovery outcome memory enriched with performance data
+[X] Cost/latency optimization tests
+~~~
+
+## Optimization model
+
+~~~text
+Failure Category
+      ↓
+Historical Strategy Outcomes
+      +
+Actual Recovery Cost
+      +
+Recovery Duration
+      ↓
+Strategy Score
+      ↓
+Bounded Recovery Strategy
+~~~
+
+Successful recovery is still the primary signal.
+Cost and duration are secondary penalties used to distinguish strategies with comparable recovery outcomes.
+
+Actual recovery cost is aggregated from durable `ModelUsageRecorded` events associated with the recovery run.
+Recovery duration is measured from replacement workflow start to terminal recovery outcome.
+
+## Safety boundary
+
+The optimization layer does not override:
+
+~~~text
+autonomy level
+risk ceiling
+human approval requirement
+maximum recovery attempts
+~~~
+
+The recovery policy remains the gate. Optimization only chooses the strategy after recovery is already authorized.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] cross-project strategy learning
+[ ] provider-specific reliability learning
+[ ] learned failure probability
+[ ] recovery rollback automation
+[ ] human approval interface
+[ ] online worker telemetry
+[ ] multi-objective optimization beyond cost / duration
+~~~
+
+## Next phase
+
+~~~text
+TITAN HUMAN GOVERNANCE + RECOVERY ROLLBACK
+~~~
+
+The next layer should make adaptive recovery reversible and explicitly govern high-impact decisions:
+
+~~~text
+Recovery Proposal
+      ↓
+Risk / Autonomy Check
+      ↓
+Human Approval when required
+      ↓
+Execute Recovery
+      ↓
+Evaluate
+      ├── EFFECTIVE → Continue
+      └── INEFFECTIVE → Rollback / Escalate
+~~~
+
+---
+
+# END OF RECOVERY OPTIMIZATION CHECKPOINT
