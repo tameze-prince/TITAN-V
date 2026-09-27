@@ -9649,3 +9649,162 @@ UPDATE STRATEGY MEMORY
 ---
 
 # END OF RECOVERY EFFECTIVENESS + OBSERVABILITY CHECKPOINT
+
+---
+
+# 223. TITAN STRATEGY LEARNING + ADAPTIVE RECOVERY CHECKPOINT — 2026-09-27
+
+## Status
+
+TITAN now uses durable recovery outcomes to choose between bounded recovery strategies.
+
+Implemented:
+
+~~~text
+[X] Failure-category classification
+[X] Recovery strategy selector
+[X] Historical recovery outcome observations
+[X] Strategy-specific recovery scoring
+[X] REPLAN_REASSIGN strategy
+[X] REPLAN_SAME_AGENT strategy
+[X] Automatic strategy selection during eligible recovery
+[X] Strategy propagation into replacement graph metadata
+[X] Strategy propagation into recovery lineage events
+[X] Recovery strategy effectiveness counters
+[X] Recovery API strategy telemetry
+[X] Replanner support for controlled same-agent re-execution
+[X] Strategy learning unit tests
+~~~
+
+## Adaptive strategy model
+
+~~~text
+Workflow Failure
+      ↓
+Failure Category
+      ↓
+Historical Recovery Evidence
+      ↓
+Strategy Selector
+      ├── REPLAN_REASSIGN
+      │      ↓
+      │   Alternate compatible agent
+      │
+      └── REPLAN_SAME_AGENT
+             ↓
+          Preserve assignment
+      ↓
+Replacement Workflow
+      ↓
+Outcome
+      ↓
+Strategy Memory
+~~~
+
+The selector learns only from durable events belonging to the same project and failure category.
+
+The learning signal remains deterministic and bounded:
+
+~~~text
+resolved
++
+repeated failure
++
+escalation
++
+failed-to-start
+~~~
+
+No model-generated autonomous strategy is introduced at this stage.
+
+## Failure categories
+
+The current deterministic classifier recognizes:
+
+~~~text
+EVALUATION
+PROVIDER
+TOOL
+BUDGET
+DEPENDENCY
+UNKNOWN
+~~~
+
+Unknown failures safely fall back to the normal reassignment strategy.
+
+## Strategy safety
+
+Strategy learning never bypasses the recovery policy.
+
+The sequence remains:
+
+~~~text
+Safety Policy
+      ↓
+AUTO_RECOVER eligible?
+      ↓ yes
+Strategy Selector
+      ↓
+Bounded Replan
+      ↓
+Replacement Workflow
+~~~
+
+A project that is not eligible for autonomous recovery still escalates regardless of learned strategy.
+
+## Observability
+
+Recovery metrics now expose:
+
+~~~text
+strategy_counts
+~~~
+
+alongside the existing resolution/repetition/escalation counters.
+
+This allows TITAN to determine which recovery strategies are actually being used before introducing more advanced optimization.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] semantic root-cause analysis
+[ ] strategy learning across projects
+[ ] provider migration strategy
+[ ] learned failure probability
+[ ] learned recovery cost / latency optimization
+[ ] automatic rollback of ineffective recovery graphs
+[ ] human approval interface
+[ ] online worker-capacity telemetry
+~~~
+
+## Next phase
+
+~~~text
+TITAN RECOVERY OPTIMIZATION + HUMAN GOVERNANCE
+~~~
+
+The next layer should combine:
+
+~~~text
+Failure Classification
+      +
+Recovery History
+      +
+Actual Recovery Cost
+      +
+Recovery Latency
+      +
+Risk / Autonomy
+      +
+Human Approval State
+      ↓
+Recovery Decision
+      ↓
+Recover / Rollback / Escalate
+~~~
+
+---
+
+# END OF STRATEGY LEARNING + ADAPTIVE RECOVERY CHECKPOINT
