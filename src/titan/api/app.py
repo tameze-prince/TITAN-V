@@ -184,6 +184,7 @@ class RecoveryMetricsResponse(BaseModel):
     terminal_attempts: int
     resolved_ratio: float
     latest_outcome: str | None
+    strategy_counts: dict[str, int]
 
 
 @asynccontextmanager
@@ -625,6 +626,7 @@ async def get_recovery_metrics(
         terminal_attempts=metrics.terminal_attempts,
         resolved_ratio=metrics.resolved_ratio,
         latest_outcome=metrics.latest_outcome,
+        strategy_counts=metrics.strategy_counts,
     )
 
 
