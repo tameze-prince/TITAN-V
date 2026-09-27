@@ -1,3 +1,9 @@
+from titan.runtime.governance import (
+    GovernanceAction,
+    GovernanceCheck,
+    GovernanceDecision,
+    GovernanceEngine,
+)
 from titan.runtime.service import AgentRuntime, get_agent_runtime
 from titan.runtime.workspace import Workspace, WorkspaceManager
 from titan.runtime.memory import MemoryStore
@@ -28,6 +34,10 @@ __all__ = [
     "DependencyAwareScheduler",
     "AdaptiveReplanner",
     "EvaluationEngine",
+    "GovernanceAction",
+    "GovernanceCheck",
+    "GovernanceDecision",
+    "GovernanceEngine",
     "IntentCompiler",
     "IntentRepresentation",
     "MemoryStore",

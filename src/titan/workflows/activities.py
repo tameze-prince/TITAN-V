@@ -22,6 +22,7 @@ from titan.persistence.models import (
 )
 from titan.runtime.contracts import AgentTaskContext
 from titan.runtime.evaluation_service import EvaluationCheck, EvaluationEngine
+from titan.runtime.governance import GovernanceEngine
 from titan.runtime.memory import MemoryStore
 from titan.runtime.repair import AgentEvaluationFailure
 from titan.runtime.recovery_strategy import (
@@ -791,7 +792,14 @@ async def attempt_automatic_recovery(
             approval_required=approval_required,
         )
 
-        if assessment.action != "AUTO_RECOVER":
+        governance = GovernanceEngine()
+        recovery_governance = governance.decide(
+            (
+                governance.check_recovery(assessment),
+            )
+        )
+
+        if not recovery_governance.allowed:
             state = await session.scalar(
                 select(ProjectStateModel).where(
                     ProjectStateModel.project_id == project.id
@@ -811,7 +819,7 @@ async def attempt_automatic_recovery(
                     aggregate_id=workflow.id,
                     payload={
                         "run_id": str(run_uuid),
-                        "reason": assessment.reason,
+                        "reason": recovery_governance.reason,
                         "current_attempt": current_attempt,
                         "max_attempts": assessment.max_attempts,
                         "failed_task_ids": [str(task.id) for task in failed_tasks],

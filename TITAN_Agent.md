@@ -10005,3 +10005,121 @@ Unified Governance Decision
 ---
 
 # END OF HUMAN GOVERNANCE + RECOVERY ROLLBACK CHECKPOINT
+
+---
+
+# 226. TITAN UNIFIED POLICY ENGINE + EXECUTION GOVERNANCE CHECKPOINT — 2026-09-27
+
+## Status
+
+TITAN now has a unified governance decision layer that composes runtime, model, and recovery policies.
+
+Implemented:
+
+~~~text
+[X] Unified GovernanceAction model
+[X] Unified GovernanceCheck model
+[X] Unified GovernanceDecision model
+[X] Runtime policy aggregation
+[X] Model quality-tier governance
+[X] Model budget preflight governance
+[X] Recovery approval/escalation governance
+[X] Agent runtime integration
+[X] Recovery activity integration
+[X] Public governance type exports
+[X] Governance unit tests
+~~~
+
+## Governance model
+
+~~~text
+Project / Task Context
+      +
+Agent Policy
+      +
+Tool Policy
+      +
+Model Policy
+      +
+Recovery Policy
+      +
+Human Approval State
+      ↓
+Unified Governance Decision
+      ├── ALLOW
+      ├── DENY
+      └── APPROVAL_REQUIRED
+~~~
+
+Governance is now a composition layer rather than a separate collection of unrelated checks.
+
+## Execution behavior
+
+Agent execution now passes through:
+
+~~~text
+Runtime Policy
+      ↓
+Model Selection
+      ↓
+Unified Governance
+      ↓
+Execution
+~~~
+
+A model route is denied before execution when its configured quality tier is below the agent requirement or its maximum estimated cost exceeds the configured model budget.
+
+## Recovery behavior
+
+Automatic recovery now passes through the same governance vocabulary:
+
+~~~text
+Recovery Policy
+      ↓
+Governance Decision
+      ├── ALLOW
+      └── APPROVAL_REQUIRED
+~~~
+
+Human approval remains an explicit control boundary and can authorize an escalated recovery through the governance API.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] project-level policy configuration objects
+[ ] persistent governance policies
+[ ] governance decision audit stream
+[ ] policy versioning
+[ ] policy simulation / dry-run
+[ ] multi-reviewer approval quorum
+[ ] organization-wide policy inheritance
+[ ] external policy engine integration
+~~~
+
+## Next phase
+
+~~~text
+TITAN GOVERNANCE CONTROL PLANE + POLICY VERSIONING
+~~~
+
+The next layer should make governance itself durable and inspectable:
+
+~~~text
+Policy Definition
+      ↓
+Policy Version
+      ↓
+Governance Evaluation
+      ↓
+Durable Decision
+      ↓
+Audit / Explainability
+      ↓
+Future Policy Revisions
+~~~
+
+---
+
+# END OF UNIFIED POLICY ENGINE + EXECUTION GOVERNANCE CHECKPOINT

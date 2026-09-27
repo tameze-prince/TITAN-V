@@ -11,6 +11,7 @@ from titan.runtime.contracts import (
     AgentTaskContext,
 )
 from titan.runtime.evaluation import evaluate_execution
+from titan.runtime.governance import GovernanceEngine
 from titan.runtime.tool_loop import AgentToolLoop
 from titan.runtime.policies import RuntimePolicy
 from titan.runtime.model_router import ModelBudget, ModelRoute, ModelRouter, ModelSelectionRequest
@@ -126,6 +127,7 @@ class AgentRuntime:
                 )
             )
         self.policy = policy or RuntimePolicy()
+        self.governance = GovernanceEngine()
         self.tools = tools or build_default_tool_registry(
             sandbox=DockerSandbox(
                 SandboxPolicy(
@@ -162,8 +164,16 @@ class AgentRuntime:
             registered_capabilities=tuple(item.name for item in capabilities),
             allowed_tools=contract.allowed_tools,
         )
-        if not decision.allowed:
-            raise PermissionError(decision.reason)
+        governance = self.governance.decide(
+            (
+                self.governance.from_policy_decision(
+                    policy="runtime",
+                    decision=decision,
+                ),
+            )
+        )
+        if not governance.allowed:
+            raise PermissionError(governance.reason)
 
         resolved_workspace = (
             workspace.resolve()
@@ -206,20 +216,28 @@ class AgentRuntime:
             registered_capabilities=tuple(item.name for item in capabilities),
             allowed_tools=tool_names,
         )
-        if not decision.allowed:
-            raise PermissionError(decision.reason)
 
+        budget = ModelBudget(
+            max_input_tokens=settings.model_max_input_tokens,
+            max_output_tokens=settings.model_max_output_tokens,
+            max_cost=settings.model_max_cost,
+        )
         selection = self.model_router.select(
             ModelSelectionRequest(
                 preferred_model=contract.model,
                 minimum_quality_tier=contract.minimum_quality_tier,
-                budget=ModelBudget(
-                    max_input_tokens=settings.model_max_input_tokens,
-                    max_output_tokens=settings.model_max_output_tokens,
-                    max_cost=settings.model_max_cost,
-                ),
+                budget=budget,
             )
         )
+
+        governance = self.governance.decide_runtime(
+            runtime_policy=decision,
+            selection=selection,
+            minimum_quality_tier=contract.minimum_quality_tier,
+            budget=budget,
+        )
+        if not governance.allowed:
+            raise PermissionError(governance.reason)
         provider = selection.provider
         started = perf_counter()
         repair_context = dict(context.inputs)
