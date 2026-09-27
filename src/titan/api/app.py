@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -172,6 +173,34 @@ class ReplanResponse(BaseModel):
     failed_task_ids: list[UUID]
     impacted_task_ids: list[UUID]
     reassignments: list[AgentReassignmentResponse]
+
+
+
+class RecoveryDecisionRequest(BaseModel):
+    approved: bool
+    strategy: RecoveryStrategy | None = None
+    reason: str = Field(default="", max_length=2_000)
+
+
+class RecoveryDecisionResponse(BaseModel):
+    project_id: UUID
+    workflow_id: UUID
+    decision: str
+    strategy: str | None
+    replacement_workflow_id: UUID | None
+    message: str
+
+
+class RecoveryRollbackRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=2_000)
+
+
+class RecoveryRollbackResponse(BaseModel):
+    project_id: UUID
+    recovery_workflow_id: UUID
+    source_workflow_id: UUID | None
+    status: str
+    reason: str
 
 
 class RecoveryMetricsResponse(BaseModel):
@@ -627,6 +656,189 @@ async def get_recovery_metrics(
         resolved_ratio=metrics.resolved_ratio,
         latest_outcome=metrics.latest_outcome,
         strategy_counts=metrics.strategy_counts,
+    )
+
+
+@app.post(
+    "/api/v1/projects/{project_id}/workflows/{workflow_id}/recovery/decision",
+    response_model=RecoveryDecisionResponse,
+)
+async def decide_recovery(
+    project_id: UUID,
+    workflow_id: UUID,
+    payload: RecoveryDecisionRequest,
+    session: AsyncSession = Depends(get_session),
+) -> RecoveryDecisionResponse:
+    project = await session.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
+    workflow = await session.scalar(
+        select(WorkflowModel).where(
+            WorkflowModel.id == workflow_id,
+            WorkflowModel.project_id == project_id,
+        )
+    )
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if workflow is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
+    if workflow.status != "FAILED":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Recovery decisions require a failed workflow; current status is {workflow.status}",
+        )
+
+    escalation = await session.scalar(
+        select(EventModel)
+        .where(
+            EventModel.project_id == project_id,
+            EventModel.aggregate_type == "WORKFLOW",
+            EventModel.aggregate_id == workflow.id,
+            EventModel.type == "RecoveryEscalated",
+        )
+        .order_by(EventModel.occurred_at.desc())
+        .limit(1)
+    )
+    if escalation is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No pending recovery escalation exists for this workflow",
+        )
+
+    escalation_payload = escalation.payload or {}
+    current_attempt = int(escalation_payload.get("current_attempt", 0))
+    if current_attempt >= settings.recovery_max_attempts:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Recovery attempt budget is exhausted",
+        )
+
+    if not payload.approved:
+        session.add(
+            EventModel(
+                project_id=project_id,
+                type="RecoveryRejected",
+                actor_type="USER",
+                aggregate_type="WORKFLOW",
+                aggregate_id=workflow.id,
+                payload={
+                    "reason": payload.reason or "Recovery rejected by human decision",
+                    "current_attempt": current_attempt,
+                },
+            )
+        )
+        state = await session.scalar(
+            select(ProjectStateModel).where(ProjectStateModel.project_id == project_id)
+        )
+        if state is not None:
+            state.status = "FAILED"
+            state.phase = "RECOVERY_REJECTED"
+            state.version += 1
+        await session.commit()
+        return RecoveryDecisionResponse(
+            project_id=project_id,
+            workflow_id=workflow_id,
+            decision="REJECTED",
+            strategy=None,
+            replacement_workflow_id=None,
+            message=payload.reason or "Recovery rejected by human decision",
+        )
+
+    failure_category = str(
+        escalation_payload.get("failure_category")
+        or classify_failure(str(escalation_payload.get("error_message", ""))).value
+    )
+    if payload.strategy is None:
+        history_events = list(
+            await session.scalars(
+                select(EventModel)
+                .where(
+                    EventModel.project_id == project_id,
+                    EventModel.type.in_(
+                        (
+                            "RecoveryStarted",
+                            "RecoveryResolved",
+                            "RecoveryRepeatedFailure",
+                            "RecoveryEscalated",
+                            "RecoveryFailed",
+                        )
+                    ),
+                )
+                .order_by(EventModel.occurred_at.desc())
+                .limit(50)
+            )
+        )
+        strategy = RecoveryStrategySelector().select(
+            category=classify_failure(failure_category),
+            observations=observations_from_events(history_events),
+        ).strategy
+    else:
+        strategy = payload.strategy
+
+    recovery_root = str(
+        escalation_payload.get("recovery_root_workflow_id") or workflow.id
+    )
+    session.add(
+        EventModel(
+            project_id=project_id,
+            type="RecoveryApproved",
+            actor_type="USER",
+            aggregate_type="WORKFLOW",
+            aggregate_id=workflow.id,
+            payload={
+                "reason": payload.reason or "Recovery approved by human decision",
+                "current_attempt": current_attempt,
+                "strategy": strategy.value,
+                "failure_category": failure_category,
+            },
+        )
+    )
+    await session.flush()
+
+    try:
+        runtime = get_agent_runtime()
+        result = await start_recovery_workflow(
+            session,
+            project=project,
+            workflow=workflow,
+            run_id=str(workflow.temporal_run_id or ""),
+            error_message=str(escalation_payload.get("error_message", "")),
+            recovery_attempt=current_attempt + 1,
+            recovery_root_workflow_id=recovery_root,
+            failure_category=failure_category,
+            strategy=strategy,
+            runtime=runtime,
+        )
+        await session.commit()
+    except Exception as exc:
+        await session.rollback()
+        session.add(
+            EventModel(
+                project_id=project_id,
+                type="RecoveryFailed",
+                actor_type="SYSTEM",
+                aggregate_type="WORKFLOW",
+                aggregate_id=workflow.id,
+                payload={
+                    "recovery_attempt": current_attempt + 1,
+                    "failure_category": failure_category,
+                    "strategy": strategy.value,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                },
+            )
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to start the approved recovery workflow",
+        ) from exc
+
+    return RecoveryDecisionResponse(
+        project_id=project_id,
+        workflow_id=workflow_id,
+        decision="APPROVED",
+        strategy=result.strategy,
+        replacement_workflow_id=result.replacement_workflow_id,
+        message="Approved recovery workflow started",
     )
 
 
