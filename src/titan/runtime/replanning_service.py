@@ -272,6 +272,7 @@ async def replan_failed_workflow(
             }
             for item in decision.reassignments
         ],
+        "recovery_strategy": recovery_strategy,
     }
     project.current_phase = "EXECUTION_READY"
 
