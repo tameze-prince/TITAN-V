@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { titanFetch } from "../../../lib/api";
 import type { ProjectOverview, StatusCounts } from "../../../lib/types";
+import { RecoveryControls } from "./RecoveryControls";
 
 function Counts({ title, counts }: { title: string; counts: StatusCounts }) {
   return (
@@ -105,6 +106,11 @@ export default async function ProjectPage({
             </div>
           </div>
         </section>
+
+        <RecoveryControls
+          projectId={projectId}
+          actions={project.recovery_actions}
+        />
 
         <section className="layout">
           <div className="card">
