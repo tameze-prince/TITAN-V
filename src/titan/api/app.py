@@ -30,6 +30,14 @@ from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
 from titan.runtime.scheduler import DependencyAwareScheduler, TaskScheduleError, TaskSchedulingProfile
 from titan.runtime.planning_service import persist_task_graph
 from titan.runtime.replanning_service import replan_failed_workflow
+from titan.runtime.recovery_service import start_recovery_workflow
+from titan.runtime.recovery_strategy import (
+    FailureCategory,
+    RecoveryStrategy,
+    RecoveryStrategySelector,
+    classify_failure,
+    observations_from_events,
+)
 from titan.runtime.recovery_metrics import collect_recovery_metrics
 from titan.runtime.service import get_agent_runtime
 from titan.workflows.contracts import WorkflowInput, WorkflowTaskProfile
