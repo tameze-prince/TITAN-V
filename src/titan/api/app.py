@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -845,6 +845,157 @@ async def decide_recovery(
         strategy=result.strategy,
         replacement_workflow_id=result.replacement_workflow_id,
         message="Approved recovery workflow started",
+    )
+
+
+@app.post(
+    "/api/v1/projects/{project_id}/workflows/{workflow_id}/recovery/rollback",
+    response_model=RecoveryRollbackResponse,
+)
+async def rollback_recovery(
+    project_id: UUID,
+    workflow_id: UUID,
+    payload: RecoveryRollbackRequest,
+    session: AsyncSession = Depends(get_session),
+    temporal_client: Client = Depends(get_temporal_client),
+) -> RecoveryRollbackResponse:
+    project = await session.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
+    workflow = await session.scalar(
+        select(WorkflowModel).where(
+            WorkflowModel.id == workflow_id,
+            WorkflowModel.project_id == project_id,
+        )
+    )
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if workflow is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
+    if workflow.workflow_type != "RECOVERY":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only recovery workflows can be rolled back",
+        )
+
+    recovery_started = await session.scalar(
+        select(EventModel)
+        .where(
+            EventModel.project_id == project_id,
+            EventModel.aggregate_type == "WORKFLOW",
+            EventModel.aggregate_id == workflow.id,
+            EventModel.type == "WorkflowRecoveryStarted",
+        )
+        .order_by(EventModel.occurred_at.desc())
+        .limit(1)
+    )
+    recovery_payload = recovery_started.payload if recovery_started is not None else {}
+    source_workflow_raw = recovery_payload.get("source_workflow_id")
+    source_workflow_id = UUID(source_workflow_raw) if source_workflow_raw else None
+
+    if workflow.status in {"STARTING", "RUNNING"} and workflow.temporal_workflow_id:
+        try:
+            handle = temporal_client.get_workflow_handle(workflow.temporal_workflow_id)
+            await handle.cancel()
+        except Exception:
+            pass
+
+    workflow.status = "ROLLED_BACK"
+    workflow.completed_at = workflow.completed_at or datetime.now(UTC)
+
+    graph = None
+    if workflow.task_graph_id is not None:
+        graph = await session.scalar(
+            select(TaskGraphModel).where(TaskGraphModel.id == workflow.task_graph_id)
+        )
+        if graph is not None:
+            graph.status = "ROLLED_BACK"
+
+    tasks = list(
+        await session.scalars(select(TaskModel).where(TaskModel.workflow_id == workflow.id))
+    )
+    for task in tasks:
+        task.status = "ROLLED_BACK"
+
+    state = await session.scalar(
+        select(ProjectStateModel).where(ProjectStateModel.project_id == project_id)
+    )
+    if state is not None:
+        state.status = "WAITING_HUMAN"
+        state.phase = "RECOVERY_ROLLED_BACK"
+        state.version += 1
+        if source_workflow_id is not None:
+            source_workflow = await session.scalar(
+                select(WorkflowModel).where(
+                    WorkflowModel.id == source_workflow_id,
+                    WorkflowModel.project_id == project_id,
+                )
+            )
+            if source_workflow is not None and source_workflow.task_graph_id is not None:
+                state.state_json = {
+                    **state.state_json,
+                    "task_graph_id": str(source_workflow.task_graph_id),
+                    "rolled_back_recovery_workflow_id": str(workflow.id),
+                }
+
+    session.add(
+        EventModel(
+            project_id=project_id,
+            type="RecoveryRolledBack",
+            actor_type="USER",
+            aggregate_type="WORKFLOW",
+            aggregate_id=workflow.id,
+            payload={
+                "source_workflow_id": str(source_workflow_id)
+                if source_workflow_id is not None
+                else None,
+                "task_graph_id": str(graph.id) if graph is not None else None,
+                "reason": payload.reason,
+            },
+        )
+    )
+    session.add(
+        EventModel(
+            project_id=project_id,
+            type="RecoveryControlPlaneRollback",
+            actor_type="SYSTEM",
+            aggregate_type="WORKFLOW",
+            aggregate_id=workflow.id,
+            payload={
+                "source_workflow_id": str(source_workflow_id)
+                if source_workflow_id is not None
+                else None,
+                "reason": payload.reason,
+                "external_side_effects_reversed": False,
+            },
+        )
+    )
+    await MemoryStore().remember(
+        session,
+        project_id=project_id,
+        task_id=None,
+        kind="RECOVERY_ROLLBACK",
+        content=(
+            f"Recovery workflow {workflow.id} was rolled back at the control-plane "
+            "level; external side effects are not assumed to be reversible."
+        ),
+        importance=99,
+        source_type="RECOVERY_GOVERNANCE",
+        source_id=workflow.id,
+        metadata={
+            "source_workflow_id": str(source_workflow_id)
+            if source_workflow_id is not None
+            else None,
+            "reason": payload.reason,
+            "external_side_effects_reversed": False,
+        },
+    )
+    await session.commit()
+
+    return RecoveryRollbackResponse(
+        project_id=project_id,
+        recovery_workflow_id=workflow_id,
+        source_workflow_id=source_workflow_id,
+        status="ROLLED_BACK",
+        reason=payload.reason,
     )
 
 
