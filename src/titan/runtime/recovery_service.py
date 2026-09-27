@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from uuid import UUID
 from titan.config import settings
 from titan.integrations.temporal.client import get_temporal_client
 from sqlalchemy import select
