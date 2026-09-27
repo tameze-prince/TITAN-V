@@ -17,6 +17,7 @@ class RecoveryMetrics:
     terminal_attempts: int
     resolved_ratio: float
     latest_outcome: str | None
+    strategy_counts: dict[str, int]
 
 
 async def collect_recovery_metrics(
@@ -51,6 +52,7 @@ async def collect_recovery_metrics(
         "RecoveryFailed": 0,
     }
     latest_outcome: str | None = None
+    strategy_counts: dict[str, int] = {}
 
     outcome_by_event = {
         "RecoveryResolved": "RESOLVED",
@@ -61,6 +63,10 @@ async def collect_recovery_metrics(
 
     for event in events:
         counts[event.type] += 1
+        if event.type == "RecoveryStarted":
+            strategy = (event.payload or {}).get("strategy")
+            if strategy:
+                strategy_counts[strategy] = strategy_counts.get(strategy, 0) + 1
         if latest_outcome is None and event.type in outcome_by_event:
             latest_outcome = outcome_by_event[event.type]
 
@@ -85,4 +91,5 @@ async def collect_recovery_metrics(
         terminal_attempts=terminal_attempts,
         resolved_ratio=round(resolved_ratio, 4),
         latest_outcome=latest_outcome,
+        strategy_counts=dict(sorted(strategy_counts.items())),
     )
