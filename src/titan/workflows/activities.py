@@ -32,6 +32,37 @@ from titan.runtime.recovery_strategy import (
 from titan.runtime.service import get_agent_runtime
 
 
+async def _run_recovery_cost(
+    session,
+    *,
+    project_id: UUID,
+    run_id: UUID,
+) -> float:
+    events = list(
+        await session.scalars(
+            select(EventModel)
+            .where(
+                EventModel.project_id == project_id,
+                EventModel.type == "ModelUsageRecorded",
+            )
+            .order_by(EventModel.occurred_at.desc())
+            .limit(5000)
+        )
+    )
+    total = 0.0
+    run_id_text = str(run_id)
+    for event in events:
+        payload = event.payload or {}
+        if payload.get("run_id") != run_id_text:
+            continue
+        usage = payload.get("usage") or {}
+        try:
+            total += float(usage.get("estimated_cost") or 0.0)
+        except (TypeError, ValueError):
+            continue
+    return round(total, 8)
+
+
 @activity.defn
 async def mark_workflow_started(
     workflow_id: str,
@@ -493,6 +524,23 @@ async def mark_workflow_completed(
             source_workflow_id = recovery_payload.get("source_workflow_id")
             recovery_root_workflow_id = recovery_payload.get("recovery_root_workflow_id")
             reexecuted_count = max(0, len(completed_task_ids) - precompleted_count)
+            actual_cost = await _run_recovery_cost(
+                session,
+                project_id=workflow.project_id,
+                run_id=run_uuid,
+            )
+            duration_ms = (
+                max(
+                    0,
+                    int(
+                        (
+                            now - workflow.started_at
+                        ).total_seconds() * 1000
+                    ),
+                )
+                if workflow.started_at is not None
+                else 0
+            )
             session.add(
                 EventModel(
                     project_id=workflow.project_id,
@@ -506,6 +554,8 @@ async def mark_workflow_completed(
                         "recovery_root_workflow_id": recovery_root_workflow_id,
                         "failure_category": recovery_payload.get("failure_category"),
                         "strategy": recovery_payload.get("strategy"),
+                        "actual_cost": actual_cost,
+                        "duration_ms": duration_ms,
                         "completed_task_count": len(completed_task_ids),
                         "preserved_task_count": precompleted_count,
                         "reexecuted_task_count": reexecuted_count,
@@ -529,6 +579,8 @@ async def mark_workflow_completed(
                     "recovery_attempt": recovery_attempt,
                     "failure_category": recovery_payload.get("failure_category"),
                     "strategy": recovery_payload.get("strategy"),
+                    "actual_cost": actual_cost,
+                    "duration_ms": duration_ms,
                     "preserved_task_count": precompleted_count,
                     "reexecuted_task_count": reexecuted_count,
                 },
@@ -604,6 +656,23 @@ async def mark_workflow_failed(
 
         if recovery_started is not None:
             recovery_payload = recovery_started.payload or {}
+            actual_cost = await _run_recovery_cost(
+                session,
+                project_id=workflow.project_id,
+                run_id=run_uuid,
+            )
+            duration_ms = (
+                max(
+                    0,
+                    int(
+                        (
+                            now - workflow.started_at
+                        ).total_seconds() * 1000
+                    ),
+                )
+                if workflow.started_at is not None
+                else 0
+            )
             session.add(
                 EventModel(
                     project_id=workflow.project_id,
@@ -622,6 +691,8 @@ async def mark_workflow_failed(
                             or classify_failure(error_message).value
                         ),
                         "strategy": recovery_payload.get("strategy"),
+                        "actual_cost": actual_cost,
+                        "duration_ms": duration_ms,
                         "error_message": error_message,
                     },
                 )

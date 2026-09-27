@@ -22,6 +22,8 @@ class RecoveryObservation:
     category: FailureCategory
     strategy: RecoveryStrategy
     outcome: str
+    actual_cost: float = 0.0
+    duration_ms: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +101,37 @@ class RecoveryStrategySelector:
                 + (0.5 * failed_to_start)
                 + (0.25 * escalated)
             ) / (total + 2)
-            scores[strategy] = resolved_rate - failure_penalty
+
+            observed_costs = [item.actual_cost for item in matching if item.actual_cost > 0]
+            observed_durations = [
+                item.duration_ms for item in matching if item.duration_ms > 0
+            ]
+            max_cost = max(
+                (item.actual_cost for item in relevant if item.actual_cost > 0),
+                default=0.0,
+            )
+            max_duration = max(
+                (item.duration_ms for item in relevant if item.duration_ms > 0),
+                default=0,
+            )
+            avg_cost = sum(observed_costs) / len(observed_costs) if observed_costs else 0.0
+            avg_duration = (
+                sum(observed_durations) / len(observed_durations)
+                if observed_durations
+                else 0.0
+            )
+            cost_penalty = 0.10 * (avg_cost / max_cost) if max_cost else 0.0
+            duration_penalty = (
+                0.05 * (avg_duration / max_duration)
+                if max_duration
+                else 0.0
+            )
+            scores[strategy] = (
+                resolved_rate
+                - failure_penalty
+                - cost_penalty
+                - duration_penalty
+            )
 
         ordered = sorted(
             RecoveryStrategy,
@@ -148,6 +180,8 @@ def observations_from_events(events: Iterable[object]) -> tuple[RecoveryObservat
                 category=category,
                 strategy=strategy,
                 outcome=outcome,
+                actual_cost=float(payload.get("actual_cost") or 0.0),
+                duration_ms=int(payload.get("duration_ms") or 0),
             )
         )
 
