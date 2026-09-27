@@ -15,6 +15,7 @@ from titan.persistence.database import close_database, get_session
 from titan.persistence.models import (
     AgentModel,
     EventModel,
+    GovernanceDecisionModel,
     IntentRecordModel,
     ProjectModel,
     ProjectStateModel,
@@ -25,6 +26,7 @@ from titan.persistence.models import (
 )
 from titan.runtime.intent import IntentCompiler, IntentRepresentation
 from titan.runtime.memory import MemoryStore
+from titan.runtime.policy_store import PolicyDefinition, PolicyVersionStore
 from titan.runtime.model_router import BudgetExceeded, ModelBudget, ModelSelectionRequest
 from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
 from titan.runtime.scheduler import DependencyAwareScheduler, TaskScheduleError, TaskSchedulingProfile
@@ -42,6 +44,46 @@ from titan.runtime.recovery_metrics import collect_recovery_metrics
 from titan.runtime.service import get_agent_runtime
 from titan.workflows.contracts import WorkflowInput, WorkflowTaskProfile
 from titan.workflows.runtime import TitanWorkflow
+
+
+
+class PolicyCreateRequest(BaseModel):
+    policy_name: str = Field(min_length=1, max_length=120)
+    scope_type: str = Field(default="GLOBAL", min_length=1, max_length=32)
+    scope_id: UUID | None = None
+    definition: PolicyDefinition = Field(default_factory=PolicyDefinition)
+    activate: bool = True
+    created_by: str = Field(default="SYSTEM", min_length=1, max_length=120)
+
+
+class PolicyVersionResponse(BaseModel):
+    id: UUID
+    scope_type: str
+    scope_id: UUID | None
+    policy_name: str
+    version: int
+    status: str
+    definition: dict
+    created_by: str
+
+    model_config = {"from_attributes": True}
+
+
+class GovernanceDecisionResponse(BaseModel):
+    id: UUID
+    project_id: UUID | None
+    workflow_id: UUID | None
+    task_id: UUID | None
+    policy_version_id: UUID | None
+    domain: str
+    action: str
+    allowed: bool
+    requires_human: bool
+    reason: str
+    checks: list
+    context: dict
+
+    model_config = {"from_attributes": True}
 
 
 class ProjectCreate(BaseModel):
@@ -182,6 +224,98 @@ class ReplanResponse(BaseModel):
     impacted_task_ids: list[UUID]
     reassignments: list[AgentReassignmentResponse]
 
+
+
+
+@app.post(
+    "/api/v1/policies",
+    status_code=status.HTTP_201_CREATED,
+    response_model=PolicyVersionResponse,
+)
+async def create_policy_version(
+    payload: PolicyCreateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> PolicyVersionModel:
+    store = PolicyVersionStore()
+    try:
+        row = await store.create(
+            session,
+            policy_name=payload.policy_name,
+            scope_type=payload.scope_type,
+            scope_id=payload.scope_id,
+            definition=payload.definition,
+            created_by=payload.created_by,
+            activate=payload.activate,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    session.add(
+        EventModel(
+            project_id=payload.scope_id if payload.scope_type.upper() == "PROJECT" else None,
+            type="PolicyVersionCreated",
+            actor_type="SYSTEM",
+            aggregate_type="POLICY",
+            aggregate_id=row.id,
+            payload={
+                "policy_name": row.policy_name,
+                "scope_type": row.scope_type,
+                "scope_id": str(row.scope_id) if row.scope_id else None,
+                "version": row.version,
+                "status": row.status,
+                "created_by": row.created_by,
+            },
+        )
+    )
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+@app.get(
+    "/api/v1/policies",
+    response_model=list[PolicyVersionResponse],
+)
+async def list_policy_versions(
+    policy_name: str | None = None,
+    scope_type: str | None = None,
+    scope_id: UUID | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> list[PolicyVersionModel]:
+    return await PolicyVersionStore().list_versions(
+        session,
+        policy_name=policy_name,
+        scope_type=scope_type,
+        scope_id=scope_id,
+    )
+
+
+@app.get(
+    "/api/v1/projects/{project_id}/governance/decisions",
+    response_model=list[GovernanceDecisionResponse],
+)
+async def list_governance_decisions(
+    project_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> list[GovernanceDecisionModel]:
+    project = await session.scalar(
+        select(ProjectModel).where(ProjectModel.id == project_id)
+    )
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+    return list(
+        await session.scalars(
+            select(GovernanceDecisionModel)
+            .where(GovernanceDecisionModel.project_id == project_id)
+            .order_by(GovernanceDecisionModel.created_at.desc())
+        )
+    )
 
 
 class RecoveryDecisionRequest(BaseModel):
