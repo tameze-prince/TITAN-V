@@ -1,14 +1,12 @@
 from dataclasses import dataclass
-from uuid import UUID
-
 from titan.config import settings
 from titan.integrations.temporal.client import get_temporal_client
+from sqlalchemy import select
+
 from titan.persistence.models import (
     EventModel,
     ProjectModel,
     ProjectStateModel,
-    TaskGraphModel,
-    TaskModel,
     WorkflowModel,
 )
 from titan.runtime.replanner import ReplanDecision
@@ -148,7 +146,7 @@ async def start_recovery_workflow(
     )
 
     state = await session.scalar(
-        __import__("sqlalchemy").select(ProjectStateModel).where(
+        select(ProjectStateModel).where(
             ProjectStateModel.project_id == project.id
         )
     )
