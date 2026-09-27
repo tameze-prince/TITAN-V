@@ -9532,3 +9532,120 @@ Future Recovery Decision
 ---
 
 # END OF AUTONOMOUS RECOVERY LOOP CHECKPOINT
+
+
+---
+
+# 222. TITAN RECOVERY EFFECTIVENESS + OBSERVABILITY CHECKPOINT — 2026-09-25
+
+## Status
+
+TITAN now records and exposes recovery outcomes so autonomous recovery can be measured rather than treated as a black box.
+
+Implemented:
+
+~~~text
+[X] Recovery resolved outcome
+[X] Recovery repeated-failure outcome
+[X] Recovery start-failure outcome
+[X] Recovery escalation outcome
+[X] Recovery attempt metadata
+[X] Preserved vs re-executed task counts
+[X] Recovery outcome memory
+[X] Project recovery metrics aggregation
+[X] Recovery metrics API
+~~~
+
+## Recovery effectiveness model
+
+~~~text
+Recovery Started
+      ↓
+Replacement Workflow
+      ↓
+      ├── COMPLETED → RESOLVED
+      ├── FAILED    → REPEATED_FAILURE
+      ├── ESCALATED → ESCALATED
+      └── START ERROR → FAILED_TO_START
+~~~
+
+TITAN now distinguishes the recovery strategy decision from its actual outcome.
+
+## Metrics
+
+The project recovery endpoint reports:
+
+~~~text
+started
+resolved
+repeated_failures
+escalated
+failed_to_start
+terminal_attempts
+resolved_ratio
+latest_outcome
+~~~
+
+The metrics are derived from durable events rather than process-local counters, so the information survives worker restarts.
+
+## Recovery learning signal
+
+Successful recovery now creates durable memory containing:
+
+~~~text
+source workflow
+recovery attempt
+preserved task count
+re-executed task count
+replacement workflow
+~~~
+
+This provides the foundation for future strategy optimization.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] strategy effectiveness by failure category
+[ ] automatic strategy selection from historical outcomes
+[ ] provider reliability learning
+[ ] recovery latency metrics
+[ ] recovery cost delta metrics
+[ ] human approval UI
+[ ] automatic rollback of ineffective recovery
+~~~
+
+## Next phase
+
+~~~text
+TITAN STRATEGY LEARNING + ADAPTIVE RECOVERY
+~~~
+
+The system should evolve from:
+
+~~~text
+RECOVER
+~~~
+
+to:
+
+~~~text
+OBSERVE
+  ↓
+CLASSIFY FAILURE
+  ↓
+COMPARE PAST RECOVERY STRATEGIES
+  ↓
+SELECT STRATEGY
+  ↓
+RECOVER
+  ↓
+MEASURE
+  ↓
+UPDATE STRATEGY MEMORY
+~~~
+
+---
+
+# END OF RECOVERY EFFECTIVENESS + OBSERVABILITY CHECKPOINT
