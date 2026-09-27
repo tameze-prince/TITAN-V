@@ -31,6 +31,7 @@ from titan.runtime.intent import IntentCompiler, IntentRepresentation
 from titan.runtime.memory import MemoryStore
 from titan.runtime.policy_store import PolicyDefinition, PolicyVersionStore
 from titan.runtime.model_router import BudgetExceeded, ModelBudget, ModelSelectionRequest
+from titan.runtime.operator_auth import OperatorIdentity, require_operator
 from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
 from titan.runtime.scheduler import DependencyAwareScheduler, TaskScheduleError, TaskSchedulingProfile
 from titan.runtime.planning_service import persist_task_graph
@@ -873,6 +874,7 @@ async def decide_recovery(
     workflow_id: UUID,
     payload: RecoveryDecisionRequest,
     session: AsyncSession = Depends(get_session),
+    operator: OperatorIdentity = Depends(require_operator),
 ) -> RecoveryDecisionResponse:
     project = await session.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
     workflow = await session.scalar(
@@ -927,6 +929,8 @@ async def decide_recovery(
                 payload={
                     "reason": payload.reason or "Recovery rejected by human decision",
                     "current_attempt": current_attempt,
+                    "operator_subject": operator.subject,
+                    "operator_role": operator.role,
                 },
             )
         )
@@ -998,6 +1002,8 @@ async def decide_recovery(
                 "reason": payload.reason or "Recovery approved by human decision",
                 "current_attempt": current_attempt,
                 "strategy": strategy.value,
+                "operator_subject": operator.subject,
+                "operator_role": operator.role,
                 "failure_category": failure_category,
             },
         )
@@ -1063,6 +1069,7 @@ async def rollback_recovery(
     payload: RecoveryRollbackRequest,
     session: AsyncSession = Depends(get_session),
     temporal_client: Client = Depends(get_temporal_client),
+    operator: OperatorIdentity = Depends(require_operator),
 ) -> RecoveryRollbackResponse:
     project = await session.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
     workflow = await session.scalar(
@@ -1145,7 +1152,7 @@ async def rollback_recovery(
         EventModel(
             project_id=project_id,
             type="RecoveryRolledBack",
-            actor_type="USER",
+            actor_type="OPERATOR",
             aggregate_type="WORKFLOW",
             aggregate_id=workflow.id,
             payload={
@@ -1170,6 +1177,8 @@ async def rollback_recovery(
                 else None,
                 "reason": payload.reason,
                 "external_side_effects_reversed": False,
+                "operator_subject": operator.subject,
+                "operator_role": operator.role,
             },
         )
     )
