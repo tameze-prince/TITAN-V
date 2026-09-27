@@ -96,3 +96,38 @@ def test_adaptive_replanner_requires_a_failed_task() -> None:
         assert "at least one failed task" in str(exc)
     else:
         raise AssertionError("Expected adaptive replanning to reject empty failure input")
+
+
+
+def test_adaptive_replanner_can_preserve_agent_assignment() -> None:
+    contracts = (
+        AgentContract(
+            name="general-executor",
+            role="General",
+            instructions="Execute tasks.",
+            capabilities=("analysis", "structured-output", "artifact-write"),
+            risk_ceiling="R1",
+        ),
+        AgentContract(
+            name="engineering-executor",
+            role="Engineering",
+            instructions="Execute engineering tasks.",
+            capabilities=("analysis", "structured-output", "artifact-write"),
+            risk_ceiling="R2",
+        ),
+    )
+    replanner = AdaptiveReplanner(build_registry(), contracts)
+
+    decision = replanner.analyze(
+        task_ids=("a", "b"),
+        dependencies=(("b", ("a",)),),
+        failed_task_ids=("a",),
+        task_metadata=(
+            ("a", ("analysis", "structured-output", "artifact-write"), "R1", "general-executor"),
+            ("b", ("analysis", "structured-output", "artifact-write"), "R1", "general-executor"),
+        ),
+        allow_reassignment=False,
+    )
+
+    assert decision.impacted_task_ids == ("a", "b")
+    assert decision.reassignments == ()
