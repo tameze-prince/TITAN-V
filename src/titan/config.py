@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     model_max_cost: float = 0.0
     orchestration_max_cost: float = 0.0
     recovery_auto_enabled: bool = False
+    operator_auth_required: bool = False
+    operator_api_token: str | None = None
+    operator_subject: str = "local-development-operator"
+    operator_role: str = "operator"
     recovery_max_attempts: int = 2
     recovery_min_autonomy_level: int = 3
     recovery_max_auto_risk_level: str = "R1"
