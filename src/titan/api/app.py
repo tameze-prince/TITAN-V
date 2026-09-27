@@ -29,6 +29,7 @@ from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
 from titan.runtime.scheduler import DependencyAwareScheduler, TaskScheduleError, TaskSchedulingProfile
 from titan.runtime.planning_service import persist_task_graph
 from titan.runtime.replanning_service import replan_failed_workflow
+from titan.runtime.recovery_metrics import collect_recovery_metrics
 from titan.runtime.service import get_agent_runtime
 from titan.workflows.contracts import WorkflowInput, WorkflowTaskProfile
 from titan.workflows.runtime import TitanWorkflow
@@ -171,6 +172,18 @@ class ReplanResponse(BaseModel):
     failed_task_ids: list[UUID]
     impacted_task_ids: list[UUID]
     reassignments: list[AgentReassignmentResponse]
+
+
+class RecoveryMetricsResponse(BaseModel):
+    project_id: UUID
+    started: int
+    resolved: int
+    repeated_failures: int
+    escalated: int
+    failed_to_start: int
+    terminal_attempts: int
+    resolved_ratio: float
+    latest_outcome: str | None
 
 
 @asynccontextmanager
@@ -583,6 +596,37 @@ async def replan_failed_workflow_endpoint(
             for item in decision.reassignments
         ],
     )
+
+@app.get(
+    "/api/v1/projects/{project_id}/recovery",
+    response_model=RecoveryMetricsResponse,
+)
+async def get_recovery_metrics(
+    project_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> RecoveryMetricsResponse:
+    project = await session.scalar(
+        select(ProjectModel).where(ProjectModel.id == project_id)
+    )
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    metrics = await collect_recovery_metrics(session, project_id=project_id)
+    return RecoveryMetricsResponse(
+        project_id=project_id,
+        started=metrics.started,
+        resolved=metrics.resolved,
+        repeated_failures=metrics.repeated_failures,
+        escalated=metrics.escalated,
+        failed_to_start=metrics.failed_to_start,
+        terminal_attempts=metrics.terminal_attempts,
+        resolved_ratio=metrics.resolved_ratio,
+        latest_outcome=metrics.latest_outcome,
+    )
+
 
 @app.post(
     "/api/v1/projects/{project_id}/tasks",
