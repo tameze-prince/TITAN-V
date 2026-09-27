@@ -100,9 +100,34 @@ class ProjectSummary(BaseModel):
     workflow_counts: StatusCounts
 
 
+class ProjectSnapshot(BaseModel):
+    id: UUID
+    name: str
+    objective: str | None
+    status: str
+    current_phase: str
+    autonomy_level: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ProjectStateSnapshot(BaseModel):
+    project_id: UUID
+    status: str
+    phase: str
+    version: int
+    state_json: dict
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ProjectOverviewResponse(BaseModel):
-    project: ProjectModel
-    state: ProjectStateModel | None
+    project: ProjectSnapshot
+    state: ProjectStateSnapshot | None
     task_counts: StatusCounts
     workflow_counts: StatusCounts
     agents: list[AgentSummary]
@@ -114,8 +139,6 @@ class ProjectOverviewResponse(BaseModel):
     explainability: list[dict]
     recovery: dict
     latest_task_graph: TaskGraphSummary | None
-
-    model_config = {"arbitrary_types_allowed": True}
 
 
 class ControlPlaneOverviewResponse(BaseModel):
@@ -340,8 +363,8 @@ async def get_project_control_plane(
     )
 
     return ProjectOverviewResponse(
-        project=project,
-        state=state,
+        project=ProjectSnapshot.model_validate(project),
+        state=ProjectStateSnapshot.model_validate(state) if state is not None else None,
         task_counts=task_counts,
         workflow_counts=workflow_counts,
         agents=[
