@@ -10237,3 +10237,98 @@ Durable Explainability Trace
 ---
 
 # END OF GOVERNANCE CONTROL PLANE + POLICY VERSIONING CHECKPOINT
+
+---
+
+# 228. TITAN EXECUTION OBSERVABILITY + EXPLAINABILITY CHECKPOINT — 2026-09-27
+
+## Status
+
+TITAN now exposes a durable project-level explainability trace that combines lifecycle events with governance decisions.
+
+Implemented:
+
+~~~text
+[X] Explainability trace service
+[X] Event-to-stage classification
+[X] Governance decision trace entries
+[X] Workflow-scoped trace filtering
+[X] Deterministic chronological ordering
+[X] Explainability API
+[X] Explainability trace unit tests
+~~~
+
+## Explainability path
+
+~~~text
+Intent
+  ↓
+Planning
+  ↓
+Governance
+  ↓
+Orchestration
+  ↓
+Execution
+  ↓
+Evaluation / Output
+  ↓
+Recovery / Rollback
+  ↓
+Explainability Trace
+~~~
+
+Each trace step exposes:
+
+~~~text
+timestamp
+stage
+event type
+actor
+aggregate
+human-readable summary
+structured details
+~~~
+
+The trace combines the event stream with durable governance decisions so the same endpoint can explain both what TITAN did and why a governance boundary allowed, denied, or escalated the action.
+
+Workflow filtering is supported to isolate a single execution lineage.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] distributed trace/span correlation
+[ ] UI timeline
+[ ] causal graph visualization
+[ ] natural-language explanation generation
+[ ] evidence provenance graph
+[ ] cross-project organization trace
+[ ] external observability backend integration
+~~~
+
+## Next phase
+
+~~~text
+TITAN PRODUCT CONTROL PLANE + OPERATOR EXPERIENCE
+~~~
+
+The next layer should expose the durable control plane as an operator surface:
+
+~~~text
+Projects
+Policies
+Task Graphs
+Workflows
+Governance Decisions
+Recovery
+Explainability
+Metrics
+      ↓
+Operator / Human Control Surface
+~~~
+
+---
+
+# END OF EXECUTION OBSERVABILITY + EXPLAINABILITY CHECKPOINT
