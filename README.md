@@ -8,8 +8,8 @@ The master product and architecture specification lives in `TITAN_Agent.md`.
 
 ## Current phase
 
-**TITAN Command Center MVP**
+**TITAN Command Center + Governed Actions**
 
-The durable runtime, governance, recovery, explainability and Product Control Plane API foundations are implemented. The current branch adds the first read-oriented Next.js Command Center surface for operators.
+The durable runtime, governance, recovery, explainability and Product Control Plane foundations are implemented. The Command Center now exposes governed recovery approval/rejection and rollback actions through a server-side API proxy.
 
 The repository is intentionally being built as a modular monolith plus isolated workers. See `TITAN_Agent.md` for the architecture, decisions, roadmap, and implementation checkpoints.
