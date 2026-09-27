@@ -40,6 +40,7 @@ class AdaptiveReplanner:
         dependencies: tuple[tuple[str, tuple[str, ...]], ...],
         failed_task_ids: tuple[str, ...],
         task_metadata: tuple[tuple[str, tuple[str, ...], str, str | None], ...],
+        allow_reassignment: bool = True,
     ) -> ReplanDecision:
         task_set = set(task_ids)
         failed = tuple(dict.fromkeys(failed_task_ids))
@@ -78,6 +79,20 @@ class AdaptiveReplanner:
             for task_id, capabilities, risk_level, agent_name in task_metadata
         }
         reassignments: list[Reassignment] = []
+
+        if not allow_reassignment:
+            return ReplanDecision(
+                failed_task_ids=failed,
+                impacted_task_ids=tuple(
+                    task_id for task_id in task_ids if task_id in impacted
+                ),
+                reassignments=(),
+                rationale=(
+                    "The failed task set was expanded to its downstream dependency "
+                    "closure. Recovery strategy requested re-execution on the "
+                    "existing agent assignments while preserving unaffected work."
+                ),
+            )
 
         for task_id in failed:
             item = metadata.get(task_id)
