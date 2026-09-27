@@ -923,7 +923,7 @@ async def decide_recovery(
             EventModel(
                 project_id=project_id,
                 type="RecoveryRejected",
-                actor_type="USER",
+                actor_type="OPERATOR",
                 aggregate_type="WORKFLOW",
                 aggregate_id=workflow.id,
                 payload={
@@ -995,7 +995,7 @@ async def decide_recovery(
         EventModel(
             project_id=project_id,
             type="RecoveryApproved",
-            actor_type="USER",
+            actor_type="OPERATOR",
             aggregate_type="WORKFLOW",
             aggregate_id=workflow.id,
             payload={
@@ -1161,6 +1161,8 @@ async def rollback_recovery(
                 else None,
                 "task_graph_id": str(graph.id) if graph is not None else None,
                 "reason": payload.reason,
+                "operator_subject": operator.subject,
+                "operator_role": operator.role,
             },
         )
     )
