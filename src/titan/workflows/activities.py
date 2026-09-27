@@ -459,6 +459,17 @@ async def mark_workflow_completed(
             if task_graph is not None:
                 task_graph.status = "COMPLETED"
 
+        recovery_started = await session.scalar(
+            select(EventModel)
+            .where(
+                EventModel.aggregate_type == "WORKFLOW",
+                EventModel.aggregate_id == workflow.id,
+                EventModel.type == "WorkflowRecoveryStarted",
+            )
+            .order_by(EventModel.occurred_at.desc())
+            .limit(1)
+        )
+
         session.add(
             EventModel(
                 project_id=workflow.project_id,
@@ -469,6 +480,51 @@ async def mark_workflow_completed(
                 payload={"completed_task_count": len(completed_task_ids)},
             )
         )
+
+        if recovery_started is not None:
+            recovery_payload = recovery_started.payload or {}
+            precompleted_count = int(recovery_payload.get("precompleted_task_count", 0))
+            recovery_attempt = int(recovery_payload.get("recovery_attempt", 0))
+            source_workflow_id = recovery_payload.get("source_workflow_id")
+            recovery_root_workflow_id = recovery_payload.get("recovery_root_workflow_id")
+            reexecuted_count = max(0, len(completed_task_ids) - precompleted_count)
+            session.add(
+                EventModel(
+                    project_id=workflow.project_id,
+                    type="RecoveryResolved",
+                    actor_type="SYSTEM",
+                    aggregate_type="WORKFLOW",
+                    aggregate_id=workflow.id,
+                    payload={
+                        "source_workflow_id": source_workflow_id,
+                        "recovery_attempt": recovery_attempt,
+                        "recovery_root_workflow_id": recovery_root_workflow_id,
+                        "completed_task_count": len(completed_task_ids),
+                        "preserved_task_count": precompleted_count,
+                        "reexecuted_task_count": reexecuted_count,
+                    },
+                )
+            )
+            await MemoryStore().remember(
+                session,
+                project_id=workflow.project_id,
+                task_id=None,
+                kind="RECOVERY_OUTCOME",
+                content=(
+                    f"Recovery attempt {recovery_attempt} resolved workflow "
+                    f"{source_workflow_id} through replacement workflow {workflow.id}."
+                ),
+                importance=96,
+                source_type="RECOVERY",
+                source_id=workflow.id,
+                metadata={
+                    "source_workflow_id": source_workflow_id,
+                    "recovery_attempt": recovery_attempt,
+                    "preserved_task_count": precompleted_count,
+                    "reexecuted_task_count": reexecuted_count,
+                },
+            )
+
         await session.commit()
 
 
@@ -515,6 +571,17 @@ async def mark_workflow_failed(
             if task_graph is not None:
                 task_graph.status = "FAILED"
 
+        recovery_started = await session.scalar(
+            select(EventModel)
+            .where(
+                EventModel.aggregate_type == "WORKFLOW",
+                EventModel.aggregate_id == workflow.id,
+                EventModel.type == "WorkflowRecoveryStarted",
+            )
+            .order_by(EventModel.occurred_at.desc())
+            .limit(1)
+        )
+
         session.add(
             EventModel(
                 project_id=workflow.project_id,
@@ -525,6 +592,27 @@ async def mark_workflow_failed(
                 payload={"error_message": error_message},
             )
         )
+
+        if recovery_started is not None:
+            recovery_payload = recovery_started.payload or {}
+            session.add(
+                EventModel(
+                    project_id=workflow.project_id,
+                    type="RecoveryRepeatedFailure",
+                    actor_type="SYSTEM",
+                    aggregate_type="WORKFLOW",
+                    aggregate_id=workflow.id,
+                    payload={
+                        "source_workflow_id": recovery_payload.get("source_workflow_id"),
+                        "recovery_attempt": recovery_payload.get("recovery_attempt", 0),
+                        "recovery_root_workflow_id": recovery_payload.get(
+                            "recovery_root_workflow_id"
+                        ),
+                        "error_message": error_message,
+                    },
+                )
+            )
+
         await session.commit()
 
 
