@@ -48,6 +48,18 @@ from titan.workflows.runtime import TitanWorkflow
 
 
 
+
+class ExplainabilityStepResponse(BaseModel):
+    occurred_at: datetime
+    stage: str
+    event_type: str
+    actor_type: str
+    aggregate_type: str
+    aggregate_id: UUID | None
+    summary: str
+    details: dict
+
+
 class PolicyCreateRequest(BaseModel):
     policy_name: str = Field(min_length=1, max_length=120)
     scope_type: str = Field(default="GLOBAL", min_length=1, max_length=32)
@@ -317,6 +329,53 @@ async def list_governance_decisions(
             .order_by(GovernanceDecisionModel.created_at.desc())
         )
     )
+
+
+
+@app.get(
+    "/api/v1/projects/{project_id}/explainability",
+    response_model=list[ExplainabilityStepResponse],
+)
+async def get_project_explainability(
+    project_id: UUID,
+    workflow_id: UUID | None = None,
+    limit: int = 500,
+    session: AsyncSession = Depends(get_session),
+) -> list[ExplainabilityStepResponse]:
+    if limit < 1 or limit > 2_000:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="limit must be between 1 and 2000",
+        )
+
+    project = await session.scalar(
+        select(ProjectModel).where(ProjectModel.id == project_id)
+    )
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+
+    steps = await build_project_explainability_trace(
+        session,
+        project_id=project_id,
+        workflow_id=workflow_id,
+        limit=limit,
+    )
+    return [
+        ExplainabilityStepResponse(
+            occurred_at=step.occurred_at,
+            stage=step.stage,
+            event_type=step.event_type,
+            actor_type=step.actor_type,
+            aggregate_type=step.aggregate_type,
+            aggregate_id=step.aggregate_id,
+            summary=step.summary,
+            details=step.details,
+        )
+        for step in steps
+    ]
 
 
 class RecoveryDecisionRequest(BaseModel):
