@@ -766,8 +766,14 @@ async def decide_recovery(
                 .limit(50)
             )
         )
+        try:
+            category_enum = FailureCategory(failure_category)
+        except ValueError:
+            category_enum = classify_failure(
+                str(escalation_payload.get("error_message", ""))
+            )
         strategy = RecoveryStrategySelector().select(
-            category=classify_failure(failure_category),
+            category=category_enum,
             observations=observations_from_events(history_events),
         ).strategy
     else:
