@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from titan.api.app import app
 from titan.persistence.database import SessionFactory
-from titan.persistence.models import ProjectModel
+from titan.persistence.models import EventModel, ProjectModel, WorkflowModel
 
 
 pytestmark = pytest.mark.skipif(
@@ -47,6 +47,81 @@ async def test_control_plane_project_overview_exposes_operator_state() -> None:
         global_overview = await client.get("/api/v1/control-plane/overview")
         assert global_overview.status_code == 200
         assert global_overview.json()["projects"]["total"] >= 1
+
+    async with SessionFactory() as session:
+        project = await session.scalar(
+            select(ProjectModel).where(ProjectModel.id == project_id)
+        )
+        assert project is not None
+        await session.delete(project)
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_control_plane_exposes_pending_recovery_actions() -> None:
+    name = f"recovery-actions-{uuid4()}"
+
+    async with SessionFactory() as session:
+        project = ProjectModel(name=name, objective="Exercise governed recovery actions")
+        session.add(project)
+        await session.flush()
+
+        failed_workflow = WorkflowModel(
+            project_id=project.id,
+            name="Primary execution",
+            workflow_type="GENERIC",
+            status="FAILED",
+        )
+        active_recovery = WorkflowModel(
+            project_id=project.id,
+            name="Recovery 1 for primary",
+            workflow_type="RECOVERY",
+            status="RUNNING",
+        )
+        session.add_all([failed_workflow, active_recovery])
+        await session.flush()
+
+        session.add(
+            EventModel(
+                project_id=project.id,
+                type="RecoveryEscalated",
+                actor_type="SYSTEM",
+                aggregate_type="WORKFLOW",
+                aggregate_id=failed_workflow.id,
+                payload={
+                    "reason": "Human approval required",
+                    "current_attempt": 1,
+                    "failure_category": "PROVIDER",
+                },
+            )
+        )
+        session.add(
+            EventModel(
+                project_id=project.id,
+                type="WorkflowRecoveryStarted",
+                actor_type="SYSTEM",
+                aggregate_type="WORKFLOW",
+                aggregate_id=active_recovery.id,
+                payload={"source_workflow_id": str(failed_workflow.id)},
+            )
+        )
+        await session.commit()
+        project_id = project.id
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            f"/api/v1/control-plane/projects/{project_id}"
+        )
+
+    assert response.status_code == 200
+    actions = response.json()["recovery_actions"]
+    assert {item["action"] for item in actions} == {
+        "APPROVE_OR_REJECT_RECOVERY",
+        "ROLLBACK_RECOVERY",
+    }
 
     async with SessionFactory() as session:
         project = await session.scalar(
