@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio.client import Client
 
 from titan import __version__
+from titan.api.control_plane import router as control_plane_router
 from titan.config import settings
 from titan.integrations.temporal.client import get_temporal_client
 from titan.persistence.database import close_database, get_session
@@ -426,6 +427,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="TITAN V.", version=__version__, lifespan=lifespan)
+app.include_router(control_plane_router)
 
 
 @app.get("/health")
