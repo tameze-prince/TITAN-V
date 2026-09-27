@@ -527,6 +527,8 @@ async def mark_workflow_completed(
                 metadata={
                     "source_workflow_id": source_workflow_id,
                     "recovery_attempt": recovery_attempt,
+                    "failure_category": recovery_payload.get("failure_category"),
+                    "strategy": recovery_payload.get("strategy"),
                     "preserved_task_count": precompleted_count,
                     "reexecuted_task_count": reexecuted_count,
                 },
