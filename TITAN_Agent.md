@@ -9902,3 +9902,106 @@ Evaluate
 ---
 
 # END OF RECOVERY OPTIMIZATION CHECKPOINT
+
+---
+
+# 225. TITAN HUMAN GOVERNANCE + RECOVERY ROLLBACK CHECKPOINT — 2026-09-27
+
+## Status
+
+TITAN recovery is now explicitly governable and controllable after an automatic-recovery escalation.
+
+Implemented:
+
+~~~text
+[X] Human recovery approval / rejection API
+[X] Human-selected recovery strategy override
+[X] Recovery approval lineage events
+[X] Recovery control-plane rollback API
+[X] Temporal cancellation attempt for running replacement workflows
+[X] Recovery graph/task rollback state
+[X] Project-state restoration to the source graph
+[X] Recovery rollback memory
+[X] Explicit distinction between control-plane rollback and external side-effect reversal
+~~~
+
+## Governance path
+
+~~~text
+Recovery Escalation
+      ↓
+Human Decision
+      ├── Reject → Recovery Rejected
+      │
+      └── Approve
+            ↓
+        Strategy
+            ↓
+        Replacement Workflow
+            ↓
+        Evaluate
+            ├── Effective → Continue
+            └── Ineffective → Rollback / Escalate
+~~~
+
+Human approval can authorize an escalated recovery without silently changing the automatic recovery deployment policy.
+The recovery attempt budget remains enforced.
+
+## Rollback semantics
+
+The rollback endpoint performs a control-plane rollback:
+
+~~~text
+Recovery Workflow
+      ↓
+Temporal cancellation attempt
+      ↓
+Recovery Workflow → ROLLED_BACK
+Recovery Task Graph → ROLLED_BACK
+Recovery Tasks → ROLLED_BACK
+Project State → source graph
+~~~
+
+TITAN explicitly records that external side effects are not assumed to be reversible.
+Reversal of external systems remains a future domain-specific capability.
+
+## Important implementation boundary
+
+Not yet implemented:
+
+~~~text
+[ ] graphical human approval interface
+[ ] domain-specific external side-effect compensation
+[ ] automatic rollback trigger based on evaluator score
+[ ] rollback validation against external system state
+[ ] multi-reviewer approval quorum
+[ ] policy simulation / dry-run mode
+~~~
+
+## Next phase
+
+~~~text
+TITAN POLICY ENGINE + EXECUTION GOVERNANCE
+~~~
+
+The next layer should centralize:
+
+~~~text
+Project Policy
+      +
+Agent Policy
+      +
+Tool Policy
+      +
+Model Policy
+      +
+Recovery Policy
+      +
+Human Approval State
+      ↓
+Unified Governance Decision
+~~~
+
+---
+
+# END OF HUMAN GOVERNANCE + RECOVERY ROLLBACK CHECKPOINT
