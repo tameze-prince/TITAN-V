@@ -77,6 +77,17 @@ class EventSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RecoveryAction(BaseModel):
+    workflow_id: UUID
+    workflow_name: str
+    workflow_type: str
+    workflow_status: str
+    action: str
+    reason: str
+    current_attempt: int | None = None
+    failure_category: str | None = None
+
+
 class TaskGraphSummary(BaseModel):
     id: UUID
     name: str
@@ -133,6 +144,7 @@ class ProjectOverviewResponse(BaseModel):
     agents: list[AgentSummary]
     artifacts: list[ArtifactSummary]
     governance_decisions: list[GovernanceSummary]
+    recovery_actions: list[RecoveryAction]
     pending_human_decisions: int
     pending_task_approvals: int
     recent_events: list[EventSummary]
@@ -297,6 +309,88 @@ async def get_project_control_plane(
         )
     )
 
+    recovery_workflows = list(
+        await session.scalars(
+            select(WorkflowModel)
+            .where(
+                WorkflowModel.project_id == project_id,
+                WorkflowModel.workflow_type == "RECOVERY",
+            )
+            .order_by(WorkflowModel.created_at.desc())
+            .limit(50)
+        )
+    )
+
+    recovery_events = list(
+        await session.scalars(
+            select(EventModel)
+            .where(
+                EventModel.project_id == project_id,
+                EventModel.aggregate_type == "WORKFLOW",
+                EventModel.type.in_(
+                    ("RecoveryEscalated", "RecoveryApproved", "RecoveryRejected")
+                ),
+            )
+            .order_by(EventModel.occurred_at.desc())
+            .limit(200)
+        )
+    )
+
+    latest_recovery_decision: dict[UUID, EventModel] = {}
+    for event in recovery_events:
+        if (
+            event.aggregate_id is not None
+            and event.aggregate_id not in latest_recovery_decision
+        ):
+            latest_recovery_decision[event.aggregate_id] = event
+
+    recovery_actions: list[RecoveryAction] = []
+    for event_workflow_id, event in latest_recovery_decision.items():
+        if event.type != "RecoveryEscalated":
+            continue
+
+        source_workflow = await session.scalar(
+            select(WorkflowModel).where(
+                WorkflowModel.id == event_workflow_id,
+                WorkflowModel.project_id == project_id,
+            )
+        )
+        if source_workflow is None or source_workflow.status != "FAILED":
+            continue
+
+        payload = event.payload or {}
+        recovery_actions.append(
+            RecoveryAction(
+                workflow_id=source_workflow.id,
+                workflow_name=source_workflow.name,
+                workflow_type=source_workflow.workflow_type,
+                workflow_status=source_workflow.status,
+                action="APPROVE_OR_REJECT_RECOVERY",
+                reason=str(
+                    payload.get("reason") or "Recovery requires operator decision"
+                ),
+                current_attempt=int(payload.get("current_attempt", 0)),
+                failure_category=(
+                    str(payload.get("failure_category"))
+                    if payload.get("failure_category") is not None
+                    else None
+                ),
+            )
+        )
+
+    for recovery_workflow in recovery_workflows:
+        if recovery_workflow.status in {"STARTING", "RUNNING"}:
+            recovery_actions.append(
+                RecoveryAction(
+                    workflow_id=recovery_workflow.id,
+                    workflow_name=recovery_workflow.name,
+                    workflow_type=recovery_workflow.workflow_type,
+                    workflow_status=recovery_workflow.status,
+                    action="ROLLBACK_RECOVERY",
+                    reason="Active recovery workflow can be rolled back by an operator",
+                )
+            )
+
     pending_human_decisions = int(
         await session.scalar(
             select(func.count())
@@ -379,6 +473,7 @@ async def get_project_control_plane(
         ],
         artifacts=artifacts,
         governance_decisions=governance_decisions,
+        recovery_actions=recovery_actions,
         pending_human_decisions=pending_human_decisions,
         pending_task_approvals=pending_task_approvals,
         recent_events=recent_events,
