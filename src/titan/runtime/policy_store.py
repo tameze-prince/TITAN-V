@@ -39,6 +39,10 @@ class PolicyVersionStore:
         normalized_scope = scope_type.strip().upper()
         if normalized_scope not in {"GLOBAL", "PROJECT", "AGENT"}:
             raise ValueError("Unsupported policy scope type")
+        if normalized_scope == "GLOBAL" and scope_id is not None:
+            raise ValueError("Global policies cannot have a scope id")
+        if normalized_scope != "GLOBAL" and scope_id is None:
+            raise ValueError(f"{normalized_scope} policies require a scope id")
 
         model = (
             definition
@@ -126,3 +130,31 @@ class PolicyVersionStore:
                 PolicyVersionModel.scope_id == scope_id,
             )
         return list(await session.scalars(statement))
+
+
+    async def resolve_effective(
+        self,
+        session: AsyncSession,
+        *,
+        policy_name: str,
+        project_id: UUID | None = None,
+        agent_id: UUID | None = None,
+    ) -> PolicyVersionModel | None:
+        scopes: list[tuple[str, UUID | None]] = []
+        if agent_id is not None:
+            scopes.append(("AGENT", agent_id))
+        if project_id is not None:
+            scopes.append(("PROJECT", project_id))
+        scopes.append(("GLOBAL", None))
+
+        for scope_type, scope_id in scopes:
+            policy = await self.get_active(
+                session,
+                policy_name=policy_name,
+                scope_type=scope_type,
+                scope_id=scope_id,
+            )
+            if policy is not None:
+                return policy
+
+        return None
