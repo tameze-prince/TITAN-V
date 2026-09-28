@@ -460,7 +460,7 @@ async def mark_task_waiting_for_approval(
     workflow_id: str,
     task_id: str,
     run_id: str,
-) -> bool:
+) -> str:
     workflow_uuid = UUID(workflow_id)
     task_uuid = UUID(task_id)
 
@@ -474,10 +474,14 @@ async def mark_task_waiting_for_approval(
         if task is None:
             raise ValueError(f"Approval task {task_id} not found")
 
-        if task.status in {"APPROVED", "COMPLETED"}:
-            return True
+        if task.status == "APPROVED":
+            return "APPROVED"
+        if task.status == "COMPLETED":
+            return "COMPLETED"
         if task.status == "REJECTED":
-            return False
+            return "REJECTED"
+        if task.status == "WAITING_APPROVAL":
+            return "WAITING_APPROVAL"
 
         task.status = "WAITING_APPROVAL"
         session.add(
@@ -506,7 +510,7 @@ async def mark_task_waiting_for_approval(
             state.version += 1
 
         await session.commit()
-        return True
+        return "WAITING_APPROVAL"
 
 
 @activity.defn
