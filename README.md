@@ -8,8 +8,8 @@ The master product and architecture specification lives in `TITAN_Agent.md`.
 
 ## Current phase
 
-**TITAN Command Center + Governed Actions**
+**TITAN Human-in-the-Loop Execution**
 
-The durable runtime, governance, recovery, explainability and Product Control Plane foundations are implemented. The Command Center now exposes governed recovery approval/rejection and rollback actions through a server-side API proxy.
+The durable runtime, governance, recovery, explainability, realtime control plane and governed action foundations are implemented. The Command Center can now pause approval-gated tasks, collect an operator decision, signal Temporal, and resume or reject execution.
 
 The repository is intentionally being built as a modular monolith plus isolated workers. See `TITAN_Agent.md` for the architecture, decisions, roadmap, and implementation checkpoints.
