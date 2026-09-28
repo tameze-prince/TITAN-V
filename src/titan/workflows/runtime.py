@@ -14,6 +14,8 @@ with workflow.unsafe.imports_passed_through():
         mark_workflow_started,
         orchestrate_task,
         attempt_automatic_recovery,
+        mark_task_waiting_for_approval,
+        mark_workflow_rejected,
     )
 
 
@@ -22,6 +24,20 @@ RETRY_POLICY = RetryPolicy(initial_interval=timedelta(seconds=1), maximum_attemp
 
 @workflow.defn
 class TitanWorkflow:
+    def __init__(self) -> None:
+        self._approved_tasks: set[str] = set()
+        self._rejected_tasks: dict[str, str] = {}
+
+    @workflow.signal
+    async def approve_task(self, task_id: str) -> None:
+        self._rejected_tasks.pop(task_id, None)
+        self._approved_tasks.add(task_id)
+
+    @workflow.signal
+    async def reject_task(self, task_id: str, reason: str = "") -> None:
+        self._approved_tasks.discard(task_id)
+        self._rejected_tasks[task_id] = reason or "Task approval rejected by operator"
+
     @workflow.run
     async def run(self, request: WorkflowInput) -> WorkflowResult:
         temporal_workflow_id = workflow.info().workflow_id
@@ -62,6 +78,77 @@ class TitanWorkflow:
 
         try:
             for wave in schedule.waves:
+                gated_tasks: list[str] = []
+
+                for task_id in wave:
+                    if task_id not in request.approval_task_ids:
+                        gated_tasks.append(task_id)
+                        continue
+
+                    gate_status = await workflow.execute_activity(
+                        mark_task_waiting_for_approval,
+                        args=(request.workflow_id, task_id, run_id),
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=RETRY_POLICY,
+                    )
+
+                    if gate_status == "REJECTED":
+                        await workflow.execute_activity(
+                            mark_workflow_rejected,
+                            args=(
+                                request.workflow_id,
+                                run_id,
+                                task_id,
+                                self._rejected_tasks.get(
+                                    task_id,
+                                    "Task approval rejected by operator",
+                                ),
+                            ),
+                            start_to_close_timeout=timedelta(seconds=30),
+                            retry_policy=RETRY_POLICY,
+                        )
+                        return WorkflowResult(
+                            workflow_id=request.workflow_id,
+                            status="REJECTED",
+                            completed_task_ids=tuple(completed_task_ids),
+                            execution_waves=schedule.waves,
+                            estimated_schedule_cost=schedule.estimated_cost,
+                            estimated_makespan_ms=schedule.estimated_makespan_ms,
+                            run_id=run_id,
+                        )
+
+                    if gate_status not in {"APPROVED", "COMPLETED"}:
+                        await workflow.wait_condition(
+                            lambda task_id=task_id: (
+                                task_id in self._approved_tasks
+                                or task_id in self._rejected_tasks
+                            )
+                        )
+
+                    if task_id in self._rejected_tasks:
+                        await workflow.execute_activity(
+                            mark_workflow_rejected,
+                            args=(
+                                request.workflow_id,
+                                run_id,
+                                task_id,
+                                self._rejected_tasks[task_id],
+                            ),
+                            start_to_close_timeout=timedelta(seconds=30),
+                            retry_policy=RETRY_POLICY,
+                        )
+                        return WorkflowResult(
+                            workflow_id=request.workflow_id,
+                            status="REJECTED",
+                            completed_task_ids=tuple(completed_task_ids),
+                            execution_waves=schedule.waves,
+                            estimated_schedule_cost=schedule.estimated_cost,
+                            estimated_makespan_ms=schedule.estimated_makespan_ms,
+                            run_id=run_id,
+                        )
+
+                    gated_tasks.append(task_id)
+
                 results = await asyncio.gather(
                     *(
                         workflow.execute_activity(
@@ -70,7 +157,7 @@ class TitanWorkflow:
                             start_to_close_timeout=timedelta(seconds=60),
                             retry_policy=RETRY_POLICY,
                         )
-                        for task_id in wave
+                        for task_id in gated_tasks
                     ),
                     return_exceptions=True,
                 )
