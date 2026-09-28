@@ -111,3 +111,61 @@ def test_oidc_identity_rejects_missing_titan_role(monkeypatch) -> None:
         )
 
     assert denied.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_oidc_mode_rejects_missing_configuration(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "operator_auth_required", True)
+    monkeypatch.setattr(settings, "operator_auth_mode", "oidc")
+    monkeypatch.setattr(settings, "oidc_issuer_url", None)
+    monkeypatch.setattr(settings, "oidc_audience", None)
+    monkeypatch.setattr(settings, "oidc_jwks_url", None)
+
+    with pytest.raises(HTTPException) as rejected:
+        await require_operator(
+            HTTPAuthorizationCredentials(
+                scheme="Bearer",
+                credentials="oidc-token",
+            )
+        )
+
+    assert rejected.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_oidc_mode_rejects_non_https_configuration_when_required(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "operator_auth_required", True)
+    monkeypatch.setattr(settings, "operator_auth_mode", "oidc")
+    monkeypatch.setattr(settings, "oidc_issuer_url", "http://issuer.example")
+    monkeypatch.setattr(settings, "oidc_audience", "titan-api")
+    monkeypatch.setattr(settings, "oidc_jwks_url", "http://issuer.example/jwks.json")
+    monkeypatch.setattr(settings, "oidc_require_https", True)
+
+    with pytest.raises(HTTPException) as rejected:
+        await require_operator(
+            HTTPAuthorizationCredentials(
+                scheme="Bearer",
+                credentials="oidc-token",
+            )
+        )
+
+    assert rejected.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_unknown_operator_auth_mode_is_rejected(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "operator_auth_required", True)
+    monkeypatch.setattr(settings, "operator_auth_mode", "unknown")
+
+    with pytest.raises(HTTPException) as rejected:
+        await require_operator(
+            HTTPAuthorizationCredentials(
+                scheme="Bearer",
+                credentials="token",
+            )
+        )
+
+    assert rejected.value.status_code == 503
