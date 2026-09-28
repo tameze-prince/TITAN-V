@@ -876,6 +876,7 @@ async def decide_recovery(
     session: AsyncSession = Depends(get_session),
     operator: OperatorIdentity = Depends(require_operator),
 ) -> RecoveryDecisionResponse:
+    operator.require_permission("recovery:approve")
     project = await session.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
     workflow = await session.scalar(
         select(WorkflowModel).where(
@@ -1071,6 +1072,7 @@ async def rollback_recovery(
     temporal_client: Client = Depends(get_temporal_client),
     operator: OperatorIdentity = Depends(require_operator),
 ) -> RecoveryRollbackResponse:
+    operator.require_permission("recovery:rollback")
     project = await session.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
     workflow = await session.scalar(
         select(WorkflowModel).where(
