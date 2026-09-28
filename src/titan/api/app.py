@@ -1360,27 +1360,22 @@ async def decide_task_approval(
         else:
             await handle.signal("reject_task", str(task.id), reason)
     except Exception as exc:
-        async with SessionFactory() as compensation:
-            failed_task = await compensation.scalar(
-                select(TaskModel).where(TaskModel.id == task.id)
+        task.status = "WAITING_APPROVAL"
+        session.add(
+            EventModel(
+                project_id=project_id,
+                type="TaskApprovalSignalFailed",
+                actor_type="SYSTEM",
+                aggregate_type="TASK",
+                aggregate_id=task.id,
+                payload={
+                    "operator_subject": operator.subject,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                },
             )
-            if failed_task is not None:
-                failed_task.status = "WAITING_APPROVAL"
-                compensation.add(
-                    EventModel(
-                        project_id=project_id,
-                        type="TaskApprovalSignalFailed",
-                        actor_type="SYSTEM",
-                        aggregate_type="TASK",
-                        aggregate_id=task.id,
-                        payload={
-                            "operator_subject": operator.subject,
-                            "error_type": type(exc).__name__,
-                            "error_message": str(exc),
-                        },
-                    )
-                )
-                await compensation.commit()
+        )
+        await session.commit()
 
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
