@@ -10611,3 +10611,149 @@ TITAN Event Log
 ---
 
 # END OF GOVERNED ACTIONS CHECKPOINT
+
+---
+
+# 232. TITAN IDENTITY + REAL-TIME CONTROL PLANE CHECKPOINT — 2026-09-28
+
+## Status
+
+The Command Center control plane now has an authenticated read boundary and a resumable event stream.
+
+Implemented:
+
+~~~text
+[X] Operator identity object
+[X] Role-scoped operator permissions
+[X] Viewer / operator / admin permission profiles
+[X] Authenticated Control Plane API in non-development environments
+[X] Operator identity introspection endpoint
+[X] Server-side Command Center authentication
+[X] Authenticated SSE event stream
+[X] Event cursor with timestamp + UUID ordering
+[X] Browser Last-Event-ID resume support
+[X] Next.js SSE proxy
+[X] Live Command Center event panel
+[X] Event stream unit coverage
+[X] Operator permission unit coverage
+~~~
+
+Control Plane runtime path:
+
+~~~text
+Identity
+  ↓
+Permission
+  ↓
+Control Plane API
+  ├── snapshots
+  ├── governed actions
+  └── event stream
+            ↓
+        Event Log
+            ↓
+      SSE / Last-Event-ID
+            ↓
+      Command Center
+~~~
+
+## Permission model
+
+~~~text
+viewer
+  └── control_plane:read
+
+operator
+  ├── control_plane:read
+  ├── recovery:approve
+  └── recovery:rollback
+
+admin
+  ├── control_plane:read
+  ├── recovery:approve
+  ├── recovery:rollback
+  └── policy:admin
+~~~
+
+This is the first concrete RBAC boundary. It is intentionally application-level and remains separate from the eventual OIDC identity provider.
+
+## Event stream contract
+
+Endpoint:
+
+~~~text
+GET /api/v1/control-plane/projects/{project_id}/events/stream
+~~~
+
+The stream emits:
+
+~~~text
+event: titan.event
+id: <timestamp>|<event-uuid>
+data: <JSON event envelope>
+~~~
+
+The cursor is durable enough to resume from the browser's last received event without relying on in-memory server state.
+
+The Next.js proxy consumes the browser's Last-Event-ID and forwards it to TITAN Core as the stream cursor.
+
+## Security boundary
+
+Non-development deployments require the configured operator bearer token.
+
+The Command Center never places the operator token in browser JavaScript. Server components and the Next.js server proxy attach it server-side.
+
+This remains an interim credential architecture. The long-term target remains:
+
+~~~text
+OIDC
+  ↓
+User Session
+  ↓
+RBAC
+  ↓
+Scoped Permissions
+~~~
+
+## Not yet implemented
+
+~~~text
+[ ] OIDC login
+[ ] Persistent user/session model
+[ ] Refresh token / session rotation strategy
+[ ] Fine-grained resource-level permissions
+[ ] Temporal-native human wait/resume
+[ ] Event filtering / server-side subscription filters
+[ ] Event retention / archival strategy
+[ ] Frontend optimistic state reconciliation
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN HUMAN-IN-THE-LOOP EXECUTION
+~~~
+
+The next layer should make human intervention a first-class workflow state rather than an external control-plane mutation:
+
+~~~text
+Task
+  ↓
+Governance
+  ↓
+WAITING_APPROVAL
+  ↓
+Human decision
+  ↓
+Resume / Reject / Expire
+  ↓
+Temporal execution
+  ↓
+Event Log
+  ↓
+Command Center
+~~~
+
+---
+
+# END OF IDENTITY + REAL-TIME CONTROL PLANE CHECKPOINT
