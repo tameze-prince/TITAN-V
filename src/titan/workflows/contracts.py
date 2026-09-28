@@ -24,6 +24,7 @@ class WorkflowInput:
     max_project_cost: float = 0.0
     precompleted_task_ids: tuple[str, ...] = field(default_factory=tuple)
     approval_task_ids: tuple[str, ...] = field(default_factory=tuple)
+    approval_timeout_seconds: int = 86_400
     recovery_attempt: int = 0
     recovery_root_workflow_id: str | None = None
 
