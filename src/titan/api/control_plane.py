@@ -89,6 +89,7 @@ class EventSummary(BaseModel):
     id: UUID
     type: str
     actor_type: str
+    actor_subject: str | None
     aggregate_type: str
     aggregate_id: UUID | None
     occurred_at: datetime
