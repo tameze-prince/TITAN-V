@@ -32,6 +32,7 @@ async def build_workflow_input(
 ) -> WorkflowInput:
     requested_ids = tuple(str(task.id) for task in tasks)
     requested_id_set = set(requested_ids)
+    tasks_by_id = {str(task.id): task for task in tasks}
 
     dependency_rows = list(
         await session.execute(
@@ -208,14 +209,8 @@ async def build_workflow_input(
             task_id
             for task_id in requested_ids
             if task_requires_human_approval(
-                risk_level=next(
-                    task for task in tasks
-                    if str(task.id) == task_id
-                ).risk_level,
-                approval_requirement=next(
-                    task for task in tasks
-                    if str(task.id) == task_id
-                ).approval_requirement,
+                risk_level=tasks_by_id[task_id].risk_level,
+                approval_requirement=tasks_by_id[task_id].approval_requirement,
             )
         ),
         recovery_attempt=recovery_attempt,
