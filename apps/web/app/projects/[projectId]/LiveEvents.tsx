@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { ProjectEvent } from "../../../lib/types";
 
@@ -15,29 +15,16 @@ export function LiveEvents({
 }) {
   const [events, setEvents] = useState<ProjectEvent[]>(initialEvents);
   const [connected, setConnected] = useState(false);
-  const lastEventId = useRef<string | null>(null);
-
-  const streamUrl = useMemo(
-    () =>
-      "/api/titan/projects/" +
-      projectId +
-      "/events/stream" +
-      (lastEventId.current
-        ? "?cursor=" + encodeURIComponent(lastEventId.current)
-        : ""),
-    [projectId],
-  );
-
   useEffect(() => {
-    const source = new EventSource(streamUrl);
+    const source = new EventSource(
+      "/api/titan/projects/" + projectId + "/events/stream",
+    );
 
     source.onopen = () => setConnected(true);
 
     source.addEventListener("titan.event", (message) => {
       try {
         const event = JSON.parse(message.data) as ProjectEvent;
-        lastEventId.current = message.lastEventId || event.occurred_at;
-
         setEvents((current) => {
           if (current.some((item) => item.id === event.id)) {
             return current;
@@ -57,7 +44,7 @@ export function LiveEvents({
       source.close();
       setConnected(false);
     };
-  }, [projectId, streamUrl]);
+  }, [projectId]);
 
   return (
     <div className="card">
