@@ -16,6 +16,7 @@ export type ProjectEvent = {
   id: string;
   type: string;
   actor_type: string;
+  actor_subject: string | null;
   occurred_at: string;
 };
 
