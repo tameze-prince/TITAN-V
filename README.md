@@ -8,8 +8,8 @@ The master product and architecture specification lives in `TITAN_Agent.md`.
 
 ## Current phase
 
-**TITAN Human-in-the-Loop Execution**
+**TITAN Identity / OIDC + Production Security**
 
-The durable runtime, governance, recovery, explainability, realtime control plane and governed action foundations are implemented. The Command Center can now pause approval-gated tasks, collect an operator decision, signal Temporal, and resume or reject execution.
+The durable runtime, governance, recovery, explainability, realtime control plane and governed action foundations are implemented. Approval-gated tasks can pause inside Temporal, collect an operator decision, and resume, reject, or expire deterministically.
 
-Approval-gated tasks now have a durable, configurable timeout. When the operator does not decide within the configured window, the workflow records an explicit `EXPIRED` outcome instead of waiting forever. The repository is intentionally being built as a modular monolith plus isolated workers. See `TITAN_Agent.md` for the architecture, decisions, roadmap, and implementation checkpoints.
+Operator authentication now supports provider-agnostic OIDC bearer-token validation through trusted JWKS, with issuer/audience/expiry/subject checks, configurable RBAC role mapping, HTTPS enforcement, JWKS caching, and audited operator subjects. Static operator tokens remain available as an explicit interim mode for controlled environments. Approval-gated tasks also have a durable, configurable timeout. When the operator does not decide within the configured window, the workflow records an explicit `EXPIRED` outcome instead of waiting forever. The repository is intentionally being built as a modular monolith plus isolated workers. See `TITAN_Agent.md` for the architecture, decisions, roadmap, and implementation checkpoints.
