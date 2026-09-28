@@ -20,6 +20,7 @@ from titan.persistence.models import (
 )
 from titan.runtime.explainability import build_project_explainability_trace
 from titan.runtime.event_stream import build_event_stream_response
+from titan.runtime.governance import task_requires_human_approval
 from titan.runtime.operator_auth import OperatorIdentity, require_operator
 from titan.runtime.recovery_metrics import collect_recovery_metrics
 
@@ -257,7 +258,6 @@ async def get_control_plane_overview(
             .where(
                 TaskModel.project_id == project_id,
                 TaskModel.status == "WAITING_APPROVAL",
-                TaskModel.approval_requirement != "NONE",
             )
             .order_by(TaskModel.updated_at.desc())
             .limit(50)
@@ -276,6 +276,10 @@ async def get_control_plane_overview(
         )
         for task in task_approval_tasks
         if task.workflow_id is not None
+        and task_requires_human_approval(
+            risk_level=task.risk_level,
+            approval_requirement=task.approval_requirement,
+        )
     ]
 
     pending_human_decisions = int(
