@@ -944,6 +944,7 @@ async def decide_recovery(
                 project_id=project_id,
                 type="RecoveryRejected",
                 actor_type="OPERATOR",
+                actor_subject=operator.subject,
                 aggregate_type="WORKFLOW",
                 aggregate_id=workflow.id,
                 payload={
@@ -1175,6 +1176,7 @@ async def rollback_recovery(
             project_id=project_id,
             type="RecoveryRolledBack",
             actor_type="OPERATOR",
+            actor_subject=operator.subject,
             aggregate_type="WORKFLOW",
             aggregate_id=workflow.id,
             payload={
@@ -1337,6 +1339,7 @@ async def decide_task_approval(
             type="TaskApprovalGranted" if payload.approved else "TaskApprovalRejected",
             actor_type="OPERATOR",
             actor_id=None,
+            actor_subject=operator.subject,
             aggregate_type="TASK",
             aggregate_id=task.id,
             payload={
@@ -1365,7 +1368,13 @@ async def decide_task_approval(
         if payload.approved:
             await handle.signal("approve_task", str(task.id))
         else:
-            await handle.signal("reject_task", str(task.id), reason)
+            await handle.signal(
+                "reject_task",
+                str(task.id),
+                reason,
+                operator.subject,
+                operator.role,
+            )
     except Exception as exc:
         task.status = "WAITING_APPROVAL"
         compensation_state = await session.scalar(
