@@ -96,6 +96,17 @@ class EventSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TaskApprovalAction(BaseModel):
+    task_id: UUID
+    workflow_id: UUID
+    title: str
+    objective: str
+    risk_level: str
+    status: str
+    action: str
+    reason: str
+
+
 class RecoveryAction(BaseModel):
     workflow_id: UUID
     workflow_name: str
@@ -163,6 +174,7 @@ class ProjectOverviewResponse(BaseModel):
     agents: list[AgentSummary]
     artifacts: list[ArtifactSummary]
     governance_decisions: list[GovernanceSummary]
+    task_approval_actions: list[TaskApprovalAction]
     recovery_actions: list[RecoveryAction]
     pending_human_decisions: int
     pending_task_approvals: int
@@ -239,6 +251,33 @@ async def get_control_plane_overview(
     artifacts = int(
         await session.scalar(select(func.count()).select_from(ArtifactModel)) or 0
     )
+    task_approval_tasks = list(
+        await session.scalars(
+            select(TaskModel)
+            .where(
+                TaskModel.project_id == project_id,
+                TaskModel.status == "WAITING_APPROVAL",
+                TaskModel.approval_requirement != "NONE",
+            )
+            .order_by(TaskModel.updated_at.desc())
+            .limit(50)
+        )
+    )
+    task_approval_actions = [
+        TaskApprovalAction(
+            task_id=task.id,
+            workflow_id=task.workflow_id,
+            title=task.title,
+            objective=task.objective,
+            risk_level=task.risk_level,
+            status=task.status,
+            action="APPROVE_OR_REJECT_TASK",
+            reason="Task is waiting for an operator approval before execution",
+        )
+        for task in task_approval_tasks
+        if task.workflow_id is not None
+    ]
+
     pending_human_decisions = int(
         await session.scalar(
             select(func.count())
@@ -511,6 +550,7 @@ async def get_project_control_plane(
         ],
         artifacts=artifacts,
         governance_decisions=governance_decisions,
+        task_approval_actions=task_approval_actions,
         recovery_actions=recovery_actions,
         pending_human_decisions=pending_human_decisions,
         pending_task_approvals=pending_task_approvals,
