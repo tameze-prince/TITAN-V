@@ -15,6 +15,7 @@ with workflow.unsafe.imports_passed_through():
         orchestrate_task,
         attempt_automatic_recovery,
         mark_task_waiting_for_approval,
+        mark_workflow_approval_expired,
         mark_workflow_rejected,
     )
 
@@ -118,12 +119,37 @@ class TitanWorkflow:
                         )
 
                     if gate_status not in {"APPROVED", "COMPLETED"}:
-                        await workflow.wait_condition(
-                            lambda task_id=task_id: (
-                                task_id in self._approved_tasks
-                                or task_id in self._rejected_tasks
+                        try:
+                            await workflow.wait_condition(
+                                lambda task_id=task_id: (
+                                    task_id in self._approved_tasks
+                                    or task_id in self._rejected_tasks
+                                ),
+                                timeout=timedelta(
+                                    seconds=max(1, request.approval_timeout_seconds)
+                                ),
                             )
-                        )
+                        except TimeoutError:
+                            await workflow.execute_activity(
+                                mark_workflow_approval_expired,
+                                args=(
+                                    request.workflow_id,
+                                    run_id,
+                                    task_id,
+                                    request.approval_timeout_seconds,
+                                ),
+                                start_to_close_timeout=timedelta(seconds=30),
+                                retry_policy=RETRY_POLICY,
+                            )
+                            return WorkflowResult(
+                                workflow_id=request.workflow_id,
+                                status="EXPIRED",
+                                completed_task_ids=tuple(completed_task_ids),
+                                execution_waves=schedule.waves,
+                                estimated_schedule_cost=schedule.estimated_cost,
+                                estimated_makespan_ms=schedule.estimated_makespan_ms,
+                                run_id=run_id,
+                            )
 
                     if task_id in self._rejected_tasks:
                         await workflow.execute_activity(
