@@ -549,6 +549,91 @@ async def mark_task_approval_rejected(
 
 
 @activity.defn
+async def mark_workflow_approval_expired(
+    workflow_id: str,
+    run_id: str,
+    task_id: str,
+    timeout_seconds: int,
+) -> None:
+    workflow_uuid = UUID(workflow_id)
+    run_uuid = UUID(run_id)
+    task_uuid = UUID(task_id)
+
+    async with SessionFactory() as session:
+        workflow = await session.scalar(
+            select(WorkflowModel).where(WorkflowModel.id == workflow_uuid)
+        )
+        run = await session.scalar(select(RunModel).where(RunModel.id == run_uuid))
+        task = await session.scalar(
+            select(TaskModel).where(
+                TaskModel.id == task_uuid,
+                TaskModel.workflow_id == workflow_uuid,
+            )
+        )
+        if workflow is None or run is None or task is None:
+            raise ValueError("Workflow approval timeout state not found")
+
+        now = datetime.now(UTC)
+        if task.status in {"APPROVED", "COMPLETED", "REJECTED", "EXPIRED"}:
+            return
+
+        task.status = "EXPIRED"
+        workflow.status = "EXPIRED"
+        workflow.completed_at = now
+        run.status = "EXPIRED"
+        run.completed_at = now
+
+        state = await session.scalar(
+            select(ProjectStateModel).where(
+                ProjectStateModel.project_id == workflow.project_id
+            )
+        )
+        if state is not None:
+            state.status = "EXPIRED"
+            state.phase = "HUMAN_APPROVAL_TIMEOUT"
+            state.version += 1
+
+        if workflow.task_graph_id is not None:
+            graph = await session.scalar(
+                select(TaskGraphModel).where(TaskGraphModel.id == workflow.task_graph_id)
+            )
+            if graph is not None:
+                graph.status = "EXPIRED"
+
+        session.add(
+            EventModel(
+                project_id=workflow.project_id,
+                type="TaskApprovalExpired",
+                actor_type="SYSTEM",
+                aggregate_type="TASK",
+                aggregate_id=task.id,
+                payload={
+                    "workflow_id": workflow_id,
+                    "run_id": run_id,
+                    "timeout_seconds": timeout_seconds,
+                    "reason": "Human approval window expired",
+                },
+            )
+        )
+        session.add(
+            EventModel(
+                project_id=workflow.project_id,
+                type="WorkflowApprovalExpired",
+                actor_type="SYSTEM",
+                aggregate_type="WORKFLOW",
+                aggregate_id=workflow.id,
+                payload={
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "timeout_seconds": timeout_seconds,
+                    "reason": "Human approval window expired",
+                },
+            )
+        )
+        await session.commit()
+
+
+@activity.defn
 async def mark_workflow_rejected(
     workflow_id: str,
     run_id: str,
