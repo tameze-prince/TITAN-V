@@ -3,10 +3,9 @@ import json
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from titan.persistence.database import SessionFactory
 from titan.persistence.models import EventModel, ProjectModel
