@@ -466,10 +466,12 @@ async def mark_task_waiting_for_approval(
 
     async with SessionFactory() as session:
         task = await session.scalar(
-            select(TaskModel).where(
+            select(TaskModel)
+            .where(
                 TaskModel.id == task_uuid,
                 TaskModel.workflow_id == workflow_uuid,
             )
+            .with_for_update()
         )
         if task is None:
             raise ValueError(f"Approval task {task_id} not found")
@@ -554,7 +556,7 @@ async def mark_workflow_approval_expired(
     run_id: str,
     task_id: str,
     timeout_seconds: int,
-) -> None:
+) -> str:
     workflow_uuid = UUID(workflow_id)
     run_uuid = UUID(run_id)
     task_uuid = UUID(task_id)
@@ -575,7 +577,7 @@ async def mark_workflow_approval_expired(
 
         now = datetime.now(UTC)
         if task.status in {"APPROVED", "COMPLETED", "REJECTED", "EXPIRED"}:
-            return
+            return task.status
 
         task.status = "EXPIRED"
         workflow.status = "EXPIRED"
@@ -631,6 +633,7 @@ async def mark_workflow_approval_expired(
             )
         )
         await session.commit()
+        return "EXPIRED"
 
 
 @activity.defn
