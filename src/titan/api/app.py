@@ -1016,6 +1016,7 @@ async def decide_recovery(
             project_id=project_id,
             type="RecoveryApproved",
             actor_type="OPERATOR",
+            actor_subject=operator.subject,
             aggregate_type="WORKFLOW",
             aggregate_id=workflow.id,
             payload={
