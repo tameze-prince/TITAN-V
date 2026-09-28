@@ -50,3 +50,26 @@ async def test_production_operator_requires_valid_bearer_token(monkeypatch) -> N
 
     assert identity.subject == "prod-operator"
     assert identity.role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_operator_permissions_are_role_scoped(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "operator_auth_required", True)
+    monkeypatch.setattr(settings, "operator_api_token", "viewer-token")
+    monkeypatch.setattr(settings, "operator_subject", "viewer")
+    monkeypatch.setattr(settings, "operator_role", "viewer")
+
+    identity = await require_operator(
+        HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials="viewer-token",
+        )
+    )
+
+    assert identity.has_permission("control_plane:read")
+    assert not identity.has_permission("recovery:approve")
+
+    with pytest.raises(HTTPException) as denied:
+        identity.require_permission("recovery:rollback")
+    assert denied.value.status_code == 403
