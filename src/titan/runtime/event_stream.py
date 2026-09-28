@@ -52,6 +52,10 @@ async def _get_events_after(
             try:
                 cursor_time_raw, cursor_id_raw = cursor.rsplit("|", 1)
                 cursor_time = datetime.fromisoformat(cursor_time_raw)
+                if cursor_time.tzinfo is None:
+                    cursor_time = cursor_time.replace(tzinfo=UTC)
+                else:
+                    cursor_time = cursor_time.astimezone(UTC)
                 cursor_id = UUID(cursor_id_raw)
             except ValueError as exc:
                 raise ValueError("Invalid event cursor") from exc
