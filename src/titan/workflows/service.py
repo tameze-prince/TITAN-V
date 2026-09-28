@@ -203,6 +203,14 @@ async def build_workflow_input(
         task_profiles=tuple(task_profiles),
         max_project_cost=settings.orchestration_max_cost,
         precompleted_task_ids=tuple(precompleted_task_ids),
+        approval_task_ids=tuple(
+            task_id
+            for task_id in requested_ids
+            if next(
+                task for task in tasks
+                if str(task.id) == task_id
+            ).approval_requirement not in {"NONE", ""}
+        ),
         recovery_attempt=recovery_attempt,
         recovery_root_workflow_id=recovery_root_workflow_id,
     )
