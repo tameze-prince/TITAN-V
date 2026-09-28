@@ -252,36 +252,6 @@ async def get_control_plane_overview(
     artifacts = int(
         await session.scalar(select(func.count()).select_from(ArtifactModel)) or 0
     )
-    task_approval_tasks = list(
-        await session.scalars(
-            select(TaskModel)
-            .where(
-                TaskModel.project_id == project_id,
-                TaskModel.status == "WAITING_APPROVAL",
-            )
-            .order_by(TaskModel.updated_at.desc())
-            .limit(50)
-        )
-    )
-    task_approval_actions = [
-        TaskApprovalAction(
-            task_id=task.id,
-            workflow_id=task.workflow_id,
-            title=task.title,
-            objective=task.objective,
-            risk_level=task.risk_level,
-            status=task.status,
-            action="APPROVE_OR_REJECT_TASK",
-            reason="Task is waiting for an operator approval before execution",
-        )
-        for task in task_approval_tasks
-        if task.workflow_id is not None
-        and task_requires_human_approval(
-            risk_level=task.risk_level,
-            approval_requirement=task.approval_requirement,
-        )
-    ]
-
     pending_human_decisions = int(
         await session.scalar(
             select(func.count())
@@ -471,6 +441,36 @@ async def get_project_control_plane(
                     reason="Active recovery workflow can be rolled back by an operator",
                 )
             )
+
+    task_approval_tasks = list(
+        await session.scalars(
+            select(TaskModel)
+            .where(
+                TaskModel.project_id == project_id,
+                TaskModel.status == "WAITING_APPROVAL",
+            )
+            .order_by(TaskModel.updated_at.desc())
+            .limit(50)
+        )
+    )
+    task_approval_actions = [
+        TaskApprovalAction(
+            task_id=task.id,
+            workflow_id=task.workflow_id,
+            title=task.title,
+            objective=task.objective,
+            risk_level=task.risk_level,
+            status=task.status,
+            action="APPROVE_OR_REJECT_TASK",
+            reason="Task is waiting for an operator approval before execution",
+        )
+        for task in task_approval_tasks
+        if task.workflow_id is not None
+        and task_requires_human_approval(
+            risk_level=task.risk_level,
+            approval_requirement=task.approval_requirement,
+        )
+    ]
 
     pending_human_decisions = int(
         await session.scalar(
