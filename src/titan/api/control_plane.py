@@ -224,6 +224,8 @@ async def _require_project(
 class OperatorIdentityResponse(BaseModel):
     subject: str
     role: str
+    auth_method: str
+    issuer: str | None
     permissions: list[str]
 
 
@@ -236,6 +238,8 @@ async def get_operator_identity(
     return OperatorIdentityResponse(
         subject=operator.subject,
         role=operator.role,
+        auth_method=operator.auth_method,
+        issuer=operator.issuer,
         permissions=sorted(ROLE_PERMISSIONS.get(operator.role, frozenset())),
     )
 
