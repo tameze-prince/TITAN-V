@@ -642,6 +642,8 @@ async def mark_workflow_rejected(
     run_id: str,
     task_id: str,
     reason: str,
+    operator_subject: str = "unknown",
+    operator_role: str = "unknown",
 ) -> None:
     workflow_uuid = UUID(workflow_id)
     run_uuid = UUID(run_id)
@@ -686,12 +688,15 @@ async def mark_workflow_rejected(
                 project_id=workflow.project_id,
                 type="WorkflowRejected",
                 actor_type="OPERATOR",
+                actor_subject=operator_subject,
                 aggregate_type="WORKFLOW",
                 aggregate_id=workflow.id,
                 payload={
                     "run_id": run_id,
                     "task_id": task_id,
                     "reason": reason or "Workflow execution rejected by operator",
+                    "operator_subject": operator_subject,
+                    "operator_role": operator_role,
                 },
             )
         )
