@@ -64,6 +64,16 @@ export type ProjectOverview = {
     media_type: string;
     created_at: string;
   }>;
+  task_approval_actions: Array<{
+    task_id: string;
+    workflow_id: string;
+    title: string;
+    objective: string;
+    risk_level: string;
+    status: string;
+    action: string;
+    reason: string;
+  }>;
   recovery_actions: Array<{
     workflow_id: string;
     workflow_name: string;
