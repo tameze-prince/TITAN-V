@@ -112,6 +112,10 @@ class TitanWorkflow:
                                     task_id,
                                     "Task approval rejected by operator",
                                 ),
+                                *self._rejection_actors.get(
+                                    task_id,
+                                    ("unknown", "unknown"),
+                                ),
                             ),
                             start_to_close_timeout=timedelta(seconds=30),
                             retry_policy=RETRY_POLICY,
@@ -167,6 +171,10 @@ class TitanWorkflow:
                                         run_id,
                                         task_id,
                                         "Task approval rejected before timeout was finalized",
+                                        *self._rejection_actors.get(
+                                            task_id,
+                                            ("unknown", "unknown"),
+                                        ),
                                     ),
                                     start_to_close_timeout=timedelta(seconds=30),
                                     retry_policy=RETRY_POLICY,
