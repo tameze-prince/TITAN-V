@@ -32,3 +32,4 @@ def test_workflow_input_carries_human_approval_gate_tasks() -> None:
     )
 
     assert value.approval_task_ids == (task_id,)
+    assert value.approval_timeout_seconds == 86_400
