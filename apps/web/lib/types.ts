@@ -12,6 +12,13 @@ export type ControlPlaneOverview = {
   pending_human_decisions: number;
 };
 
+export type ProjectEvent = {
+  id: string;
+  type: string;
+  actor_type: string;
+  occurred_at: string;
+};
+
 export type ProjectSummary = {
   id: string;
   name: string;
@@ -78,12 +85,7 @@ export type ProjectOverview = {
   }>;
   pending_human_decisions: number;
   pending_task_approvals: number;
-  recent_events: Array<{
-    id: string;
-    type: string;
-    actor_type: string;
-    occurred_at: string;
-  }>;
+  recent_events: ProjectEvent[];
   explainability: Array<{
     occurred_at: string;
     stage: string;
