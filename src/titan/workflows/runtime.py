@@ -28,6 +28,7 @@ class TitanWorkflow:
     def __init__(self) -> None:
         self._approved_tasks: set[str] = set()
         self._rejected_tasks: dict[str, str] = {}
+        self._rejection_actors: dict[str, tuple[str, str]] = {}
 
     @workflow.signal
     async def approve_task(self, task_id: str) -> None:
@@ -35,9 +36,16 @@ class TitanWorkflow:
         self._approved_tasks.add(task_id)
 
     @workflow.signal
-    async def reject_task(self, task_id: str, reason: str = "") -> None:
+    async def reject_task(
+        self,
+        task_id: str,
+        reason: str = "",
+        operator_subject: str = "unknown",
+        operator_role: str = "unknown",
+    ) -> None:
         self._approved_tasks.discard(task_id)
         self._rejected_tasks[task_id] = reason or "Task approval rejected by operator"
+        self._rejection_actors[task_id] = (operator_subject, operator_role)
 
     @workflow.run
     async def run(self, request: WorkflowInput) -> WorkflowResult:
