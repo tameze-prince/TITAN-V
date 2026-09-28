@@ -10863,3 +10863,87 @@ The next layer should replace the interim static operator credential with a real
 ---
 
 # END OF HUMAN-IN-THE-LOOP EXECUTION CHECKPOINT
+
+# 234. TITAN IDENTITY / OIDC + PRODUCTION SECURITY CHECKPOINT — 2026-09-28
+
+## Status
+
+The backend now has a provider-agnostic OIDC authentication boundary for operator-facing APIs. OIDC bearer tokens are verified against trusted JWKS keys and validated for issuer, audience, expiration, issued-at time and subject. Operator roles are derived from a configurable claims path and mapped to TITAN viewer/operator/admin roles.
+
+Implemented:
+
+~~~text
+[X] OIDC operator authentication mode
+[X] JWKS signature validation with cached key material
+[X] Issuer validation
+[X] Audience validation
+[X] exp / iat / sub / iss / aud claim requirements
+[X] Configurable OIDC role claim mapping
+[X] Optional required TITAN scope
+[X] HTTPS enforcement for issuer and JWKS endpoints
+[X] Fail-closed JWKS retrieval errors
+[X] Persistent actor_subject audit field
+[X] Alembic migration 0007_operator_identity_audit
+[X] Operator identity propagation through Temporal task rejection signals
+[X] /control-plane/me identity metadata
+~~~
+
+## Authentication modes
+
+~~~text
+Development
+  ↓
+local development identity
+
+Production / controlled deployment
+  ↓
+OIDC bearer token
+  ↓
+JWT signature + issuer + audience + time validation
+  ↓
+role claim mapping
+  ↓
+TITAN permissions
+~~~
+
+The static operator token remains available as an explicit authentication mode. It is not selected automatically when OIDC mode is configured.
+
+## Audit rule
+
+Sensitive operator decisions persist the stable authenticated subject in events.actor_subject. TITAN never persists the bearer token or the complete OIDC claims object.
+
+## Current configuration
+
+~~~text
+TITAN_OPERATOR_AUTH_MODE=oidc
+TITAN_OIDC_ISSUER_URL=<issuer>
+TITAN_OIDC_AUDIENCE=<api audience>
+TITAN_OIDC_JWKS_URL=<jwks endpoint>
+TITAN_OIDC_ROLES_CLAIM=roles
+TITAN_OIDC_REQUIRED_SCOPE=<optional scope>
+~~~
+
+## Not yet implemented
+
+~~~text
+[ ] Browser OIDC login / authorization-code + PKCE session
+[ ] Persistent user/session model
+[ ] Refresh-token/session rotation
+[ ] Delegation to another operator
+[ ] Multi-person approval
+[ ] Approval quorum
+[ ] Policy-driven approval escalation
+[ ] Fine-grained resource-level permissions
+[ ] Temporal query endpoint for waiting tasks
+[ ] Event retention / archival strategy
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN SESSION + MULTI-OPERATOR GOVERNANCE
+~~~
+
+The next layer should establish a browser session boundary for the Command Center and extend single-operator approval into delegation, quorum and policy-driven escalation.
+
+---
