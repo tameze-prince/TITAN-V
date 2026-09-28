@@ -278,8 +278,14 @@ async def require_operator(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if settings.operator_auth_mode.lower() == "oidc":
+    mode = settings.operator_auth_mode.lower()
+    if mode == "oidc":
         return await _authenticate_oidc_token(credentials.credentials)
+    if mode != "static":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Unsupported operator authentication mode '{settings.operator_auth_mode}'",
+        )
 
     configured = settings.operator_api_token
     if not configured or not compare_digest(credentials.credentials, configured):
