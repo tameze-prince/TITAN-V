@@ -556,6 +556,7 @@ class EventModel(Base):
     type: Mapped[str] = mapped_column(String(128), nullable=False)
     actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
     actor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    actor_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
     aggregate_type: Mapped[str] = mapped_column(String(64), nullable=False)
     aggregate_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     correlation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
