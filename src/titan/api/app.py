@@ -216,6 +216,7 @@ class PlannedTaskResponse(BaseModel):
     agent_name: str
     risk_level: str
     status: str
+    approval_requirement: str
 
 
 class TaskGraphResponse(BaseModel):
