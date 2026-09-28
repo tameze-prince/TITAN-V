@@ -952,6 +952,8 @@ async def decide_recovery(
                     "current_attempt": current_attempt,
                     "operator_subject": operator.subject,
                     "operator_role": operator.role,
+                    "operator_auth_method": operator.auth_method,
+                    "operator_issuer": operator.issuer,
                 },
             )
         )
@@ -1026,6 +1028,8 @@ async def decide_recovery(
                 "strategy": strategy.value,
                 "operator_subject": operator.subject,
                 "operator_role": operator.role,
+                "operator_auth_method": operator.auth_method,
+                "operator_issuer": operator.issuer,
                 "failure_category": failure_category,
             },
         )
@@ -1187,6 +1191,8 @@ async def rollback_recovery(
                 "reason": payload.reason,
                 "operator_subject": operator.subject,
                 "operator_role": operator.role,
+                "operator_auth_method": operator.auth_method,
+                "operator_issuer": operator.issuer,
             },
         )
     )
@@ -1346,6 +1352,8 @@ async def decide_task_approval(
                 "workflow_id": str(workflow.id),
                 "operator_subject": operator.subject,
                 "operator_role": operator.role,
+                "operator_auth_method": operator.auth_method,
+                "operator_issuer": operator.issuer,
                 "reason": reason,
             },
         )
