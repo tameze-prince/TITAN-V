@@ -36,6 +36,7 @@ async def main() -> None:
             mark_workflow_completed,
             mark_workflow_failed,
             attempt_automatic_recovery,
+            mark_workflow_approval_expired,
         ],
     )
 
