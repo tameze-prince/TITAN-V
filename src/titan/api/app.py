@@ -140,6 +140,20 @@ class TaskResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TaskApprovalRequest(BaseModel):
+    approved: bool
+    reason: str = Field(default="", max_length=2_000)
+
+
+class TaskApprovalResponse(BaseModel):
+    project_id: UUID
+    task_id: UUID
+    workflow_id: UUID
+    decision: str
+    reason: str
+    status: str
+
+
 class WorkflowCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     workflow_type: str = Field(default="GENERIC", min_length=1, max_length=64)
@@ -1253,6 +1267,134 @@ async def create_task(
     await session.commit()
     await session.refresh(task)
     return task
+
+
+@app.post(
+    "/api/v1/projects/{project_id}/tasks/{task_id}/approval",
+    response_model=TaskApprovalResponse,
+)
+async def decide_task_approval(
+    project_id: UUID,
+    task_id: UUID,
+    payload: TaskApprovalRequest,
+    session: AsyncSession = Depends(get_session),
+    temporal_client: Client = Depends(get_temporal_client),
+    operator: OperatorIdentity = Depends(require_operator),
+) -> TaskApprovalResponse:
+    operator.require_permission("task:approve")
+
+    task = await session.scalar(
+        select(TaskModel).where(
+            TaskModel.id == task_id,
+            TaskModel.project_id == project_id,
+        )
+    )
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    if task.workflow_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Task is not attached to a workflow",
+        )
+    if task.status != "WAITING_APPROVAL":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Task approval requires WAITING_APPROVAL status; current status is {task.status}",
+        )
+
+    workflow = await session.scalar(
+        select(WorkflowModel).where(
+            WorkflowModel.id == task.workflow_id,
+            WorkflowModel.project_id == project_id,
+        )
+    )
+    if workflow is None or not workflow.temporal_workflow_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Task workflow is not running with a Temporal workflow id",
+        )
+
+    reason = payload.reason or (
+        "Task approved by operator"
+        if payload.approved
+        else "Task rejected by operator"
+    )
+    task.status = "APPROVED" if payload.approved else "REJECTED"
+
+    session.add(
+        EventModel(
+            project_id=project_id,
+            type="TaskApprovalGranted" if payload.approved else "TaskApprovalRejected",
+            actor_type="OPERATOR",
+            actor_id=None,
+            aggregate_type="TASK",
+            aggregate_id=task.id,
+            payload={
+                "workflow_id": str(workflow.id),
+                "operator_subject": operator.subject,
+                "operator_role": operator.role,
+                "reason": reason,
+            },
+        )
+    )
+
+    state = await session.scalar(
+        select(ProjectStateModel).where(
+            ProjectStateModel.project_id == project_id
+        )
+    )
+    if state is not None and payload.approved:
+        state.status = "RUNNING"
+        state.phase = "EXECUTION"
+        state.version += 1
+
+    await session.commit()
+
+    handle = temporal_client.get_workflow_handle(workflow.temporal_workflow_id)
+    try:
+        if payload.approved:
+            await handle.signal("approve_task", str(task.id))
+        else:
+            await handle.signal("reject_task", str(task.id), reason)
+    except Exception as exc:
+        async with SessionFactory() as compensation:
+            failed_task = await compensation.scalar(
+                select(TaskModel).where(TaskModel.id == task.id)
+            )
+            if failed_task is not None:
+                failed_task.status = "WAITING_APPROVAL"
+                compensation.add(
+                    EventModel(
+                        project_id=project_id,
+                        type="TaskApprovalSignalFailed",
+                        actor_type="SYSTEM",
+                        aggregate_type="TASK",
+                        aggregate_id=task.id,
+                        payload={
+                            "operator_subject": operator.subject,
+                            "error_type": type(exc).__name__,
+                            "error_message": str(exc),
+                        },
+                    )
+                )
+                await compensation.commit()
+
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Temporal workflow could not receive the approval decision",
+        ) from exc
+
+    return TaskApprovalResponse(
+        project_id=project_id,
+        task_id=task.id,
+        workflow_id=workflow.id,
+        decision="APPROVED" if payload.approved else "REJECTED",
+        reason=reason,
+        status=task.status,
+    )
 
 
 @app.post(
