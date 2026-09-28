@@ -24,7 +24,11 @@ from titan.runtime.operator_auth import OperatorIdentity, require_operator
 from titan.runtime.recovery_metrics import collect_recovery_metrics
 
 
-router = APIRouter(prefix="/api/v1/control-plane", tags=["control-plane"])
+router = APIRouter(
+    prefix="/api/v1/control-plane",
+    tags=["control-plane"],
+    dependencies=[Depends(require_operator)],
+)
 
 
 @router.get("/projects/{project_id}/events/stream")
@@ -202,6 +206,25 @@ async def _require_project(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+class OperatorIdentityResponse(BaseModel):
+    subject: str
+    role: str
+    permissions: list[str]
+
+
+@router.get("/me", response_model=OperatorIdentityResponse)
+async def get_operator_identity(
+    operator: OperatorIdentity = Depends(require_operator),
+) -> OperatorIdentityResponse:
+    from titan.runtime.operator_auth import ROLE_PERMISSIONS
+
+    return OperatorIdentityResponse(
+        subject=operator.subject,
+        role=operator.role,
+        permissions=sorted(ROLE_PERMISSIONS.get(operator.role, frozenset())),
+    )
 
 
 @router.get("/overview", response_model=ControlPlaneOverviewResponse)
