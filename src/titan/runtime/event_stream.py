@@ -92,7 +92,7 @@ async def event_stream(
         try:
             events = await _get_events_after(project_id, current_cursor)
         except ValueError:
-            yield "event: error\ndata: {"message":"Invalid event cursor"}\n\n"
+            yield 'event: error\ndata: {"message":"Invalid event cursor"}\n\n'
             return
 
         if events:
