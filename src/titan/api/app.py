@@ -122,6 +122,7 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     objective: str = Field(min_length=1, max_length=10_000)
     risk_level: str = Field(default="R1", pattern=r"^R[0-4]$")
+    approval_requirement: str = Field(default="NONE", min_length=1, max_length=32)
 
 
 class TaskResponse(BaseModel):
@@ -136,6 +137,7 @@ class TaskResponse(BaseModel):
     risk_level: str
     position: int
     required_capabilities: list[str]
+    approval_requirement: str
 
     model_config = {"from_attributes": True}
 
@@ -737,6 +739,7 @@ async def create_task_graph_plan(
                 agent_name=node.agent_name,
                 risk_level=task.risk_level,
                 status=task.status,
+                approval_requirement=task.approval_requirement,
             )
         )
 
@@ -1250,6 +1253,7 @@ async def create_task(
         title=payload.title,
         objective=payload.objective,
         risk_level=payload.risk_level,
+        approval_requirement=payload.approval_requirement,
     )
     session.add(task)
     await session.flush()
