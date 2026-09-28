@@ -1366,6 +1366,15 @@ async def decide_task_approval(
             await handle.signal("reject_task", str(task.id), reason)
     except Exception as exc:
         task.status = "WAITING_APPROVAL"
+        compensation_state = await session.scalar(
+            select(ProjectStateModel).where(
+                ProjectStateModel.project_id == project_id
+            )
+        )
+        if compensation_state is not None:
+            compensation_state.status = "WAITING_HUMAN"
+            compensation_state.phase = "WAITING_APPROVAL"
+            compensation_state.version += 1
         session.add(
             EventModel(
                 project_id=project_id,
@@ -1375,6 +1384,7 @@ async def decide_task_approval(
                 aggregate_id=task.id,
                 payload={
                     "operator_subject": operator.subject,
+                    "decision": "APPROVED" if payload.approved else "REJECTED",
                     "error_type": type(exc).__name__,
                     "error_message": str(exc),
                 },
