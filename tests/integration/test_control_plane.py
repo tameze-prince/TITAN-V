@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from titan.api.app import app
 from titan.persistence.database import SessionFactory
-from titan.persistence.models import EventModel, ProjectModel, WorkflowModel
+from titan.persistence.models import EventModel, ProjectModel, TaskModel, WorkflowModel
 
 
 pytestmark = pytest.mark.skipif(
@@ -122,6 +122,61 @@ async def test_control_plane_exposes_pending_recovery_actions() -> None:
         "APPROVE_OR_REJECT_RECOVERY",
         "ROLLBACK_RECOVERY",
     }
+
+    async with SessionFactory() as session:
+        project = await session.scalar(
+            select(ProjectModel).where(ProjectModel.id == project_id)
+        )
+        assert project is not None
+        await session.delete(project)
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_control_plane_lists_waiting_task_approval() -> None:
+    name = f"task-approval-{uuid4()}"
+
+    async with SessionFactory() as session:
+        project = ProjectModel(name=name, objective="Exercise task approval")
+        session.add(project)
+        await session.flush()
+
+        workflow = WorkflowModel(
+            project_id=project.id,
+            name="Approval workflow",
+            workflow_type="GENERIC",
+            status="RUNNING",
+            temporal_workflow_id="temporal-approval-test",
+        )
+        session.add(workflow)
+        await session.flush()
+
+        task = TaskModel(
+            project_id=project.id,
+            workflow_id=workflow.id,
+            title="Approve deployment",
+            objective="Deploy the staging candidate",
+            status="WAITING_APPROVAL",
+            risk_level="R2",
+            approval_requirement="NONE",
+        )
+        session.add(task)
+        await session.commit()
+        project_id = project.id
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(
+            f"/api/v1/control-plane/projects/{project_id}"
+        )
+
+    assert response.status_code == 200
+    actions = response.json()["task_approval_actions"]
+    assert len(actions) == 1
+    assert actions[0]["risk_level"] == "R2"
+    assert actions[0]["task_id"] == str(task.id)
 
     async with SessionFactory() as session:
         project = await session.scalar(
