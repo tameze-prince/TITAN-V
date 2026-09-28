@@ -4,7 +4,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 import pytest
 
 from titan.config import settings
-from titan.runtime.operator_auth import require_operator
+from titan.runtime.operator_auth import require_operator, resolve_oidc_identity
 
 
 @pytest.mark.asyncio
@@ -72,4 +72,42 @@ async def test_operator_permissions_are_role_scoped(monkeypatch) -> None:
 
     with pytest.raises(HTTPException) as denied:
         identity.require_permission("recovery:rollback")
+    assert denied.value.status_code == 403
+
+  
+def test_oidc_identity_resolves_highest_privileged_allowed_role(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "oidc_roles_claim", "roles")
+    monkeypatch.setattr(settings, "oidc_admin_roles", "admin")
+    monkeypatch.setattr(settings, "oidc_operator_roles", "operator")
+    monkeypatch.setattr(settings, "oidc_viewer_roles", "viewer")
+
+    identity = resolve_oidc_identity(
+        {
+            "iss": "https://issuer.example",
+            "sub": "user-42",
+            "roles": ["viewer", "operator", "admin"],
+        }
+    )
+
+    assert identity.subject == "user-42"
+    assert identity.role == "admin"
+    assert identity.auth_method == "oidc"
+    assert identity.issuer == "https://issuer.example"
+
+
+def test_oidc_identity_rejects_missing_titan_role(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "oidc_roles_claim", "roles")
+    monkeypatch.setattr(settings, "oidc_admin_roles", "admin")
+    monkeypatch.setattr(settings, "oidc_operator_roles", "operator")
+    monkeypatch.setattr(settings, "oidc_viewer_roles", "viewer")
+
+    with pytest.raises(HTTPException) as denied:
+        resolve_oidc_identity(
+            {
+                "iss": "https://issuer.example",
+                "sub": "user-43",
+                "roles": ["guest"],
+            }
+        )
+
     assert denied.value.status_code == 403
