@@ -60,7 +60,10 @@ export function LiveEvents({
           <div className="event" key={event.id}>
             <div className="row">
               <strong>{event.type}</strong>
-              <span className="muted">{event.actor_type}</span>
+              <span className="muted">
+                {event.actor_type}
+                {event.actor_subject ? " · " + event.actor_subject : ""}
+              </span>
             </div>
             <div className="muted" style={{ marginTop: 6 }}>
               {new Date(event.occurred_at).toLocaleString()}
