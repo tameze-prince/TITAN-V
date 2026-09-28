@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     operator_api_token: str | None = None
     operator_subject: str = "local-development-operator"
     operator_role: str = "operator"
+    human_approval_timeout_seconds: int = 86_400
     recovery_max_attempts: int = 2
     recovery_min_autonomy_level: int = 3
     recovery_max_auto_risk_level: str = "R1"
