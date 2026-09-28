@@ -10757,3 +10757,105 @@ Command Center
 ---
 
 # END OF IDENTITY + REAL-TIME CONTROL PLANE CHECKPOINT
+
+---
+
+# 233. TITAN HUMAN-IN-THE-LOOP EXECUTION CHECKPOINT — 2026-09-28
+
+## Status
+
+Human approval is now a first-class execution gate inside the Temporal workflow rather than only a control-plane annotation.
+
+Implemented:
+
+~~~text
+[X] Workflow approval-task contract
+[X] Risk-aware approval gate for R2/R3/R4 tasks
+[X] Explicit approval requirement support
+[X] WAITING_APPROVAL task state
+[X] Temporal approve_task signal
+[X] Temporal reject_task signal
+[X] Durable approval request event
+[X] Durable approval decision event
+[X] Operator approval/rejection API
+[X] Temporal workflow resume after approval
+[X] Workflow terminal rejection state
+[X] Command Center task approval panel
+[X] Server-side task approval proxy
+[X] Approval gate unit coverage
+~~~
+
+Execution path:
+
+~~~text
+Task
+  ↓
+Risk / approval policy
+  ↓
+WAITING_APPROVAL
+  ↓
+Command Center
+  ↓
+Operator decision
+  ↓
+Temporal signal
+  ├── approve → execute task
+  └── reject  → REJECTED workflow
+  ↓
+Event Log
+  ↓
+Live Command Center
+~~~
+
+## Operator API
+
+Approval endpoint:
+
+~~~text
+POST /api/v1/projects/{project_id}/tasks/{task_id}/approval
+~~~
+
+Payload:
+
+~~~json
+{
+  "approved": true,
+  "reason": "Approved by operator"
+}
+~~~
+
+## Risk integration
+
+By default:
+
+~~~text
+R0 / R1 → may execute without a human gate
+R2 / R3 / R4 → Human-in-the-Loop gate
+Explicit approval_requirement != NONE → Human-in-the-Loop gate
+~~~
+
+These rules remain subject to future policy overrides and environment-specific governance.
+
+## Not yet implemented
+
+~~~text
+[ ] Approval expiry / timeout
+[ ] Delegation to another operator
+[ ] Multi-person approval
+[ ] Approval quorum
+[ ] Policy-driven approval escalation
+[ ] OIDC identity attached to approval records
+[ ] Temporal query endpoint for waiting tasks
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN IDENTITY / OIDC + PRODUCTION SECURITY
+~~~
+
+The next layer should replace the interim static operator credential with a real identity/session boundary and secure production deployment practices.
+
+---
+
+# END OF HUMAN-IN-THE-LOOP EXECUTION CHECKPOINT
