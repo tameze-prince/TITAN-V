@@ -10,7 +10,9 @@ export async function GET(
   context: { params: Promise<{ projectId: string }> },
 ) {
   const { projectId } = await context.params;
-  const cursor = request.nextUrl.searchParams.get("cursor");
+  const cursor =
+    request.headers.get("last-event-id") ??
+    request.nextUrl.searchParams.get("cursor");
 
   const upstream = await fetch(
     apiBaseUrl +
