@@ -115,3 +115,20 @@ def test_governance_denies_model_budget_before_execution() -> None:
 
     assert decision.action is GovernanceAction.DENY
     assert "exceeds configured budget" in decision.reason
+
+
+def test_risk_aware_task_approval_gate() -> None:
+    from titan.runtime.governance import task_requires_human_approval
+
+    assert not task_requires_human_approval(
+        risk_level="R1",
+        approval_requirement="NONE",
+    )
+    assert task_requires_human_approval(
+        risk_level="R1",
+        approval_requirement="HUMAN",
+    )
+    assert task_requires_human_approval(
+        risk_level="R2",
+        approval_requirement="NONE",
+    )
