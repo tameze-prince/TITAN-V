@@ -10783,6 +10783,10 @@ Implemented:
 [X] Command Center task approval panel
 [X] Server-side task approval proxy
 [X] Approval gate unit coverage
+[X] Direct workflow API path applies the same risk-aware approval gate
+[X] Configurable durable approval timeout
+[X] Explicit TASK / WORKFLOW approval-expiry events
+[X] Race-safe timeout handling when an operator decision arrives concurrently
 ~~~
 
 Execution path:
@@ -10839,7 +10843,7 @@ These rules remain subject to future policy overrides and environment-specific g
 ## Not yet implemented
 
 ~~~text
-[ ] Approval expiry / timeout
+[X] Approval expiry / timeout
 [ ] Delegation to another operator
 [ ] Multi-person approval
 [ ] Approval quorum
