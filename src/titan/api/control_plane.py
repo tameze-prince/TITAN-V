@@ -19,10 +19,25 @@ from titan.persistence.models import (
     WorkflowModel,
 )
 from titan.runtime.explainability import build_project_explainability_trace
+from titan.runtime.event_stream import build_event_stream_response
+from titan.runtime.operator_auth import OperatorIdentity, require_operator
 from titan.runtime.recovery_metrics import collect_recovery_metrics
 
 
 router = APIRouter(prefix="/api/v1/control-plane", tags=["control-plane"])
+
+
+@router.get("/projects/{project_id}/events/stream")
+async def stream_project_events(
+    project_id: UUID,
+    cursor: str | None = Query(default=None),
+    operator: OperatorIdentity = Depends(require_operator),
+):
+    return await build_event_stream_response(
+        project_id,
+        cursor=cursor,
+        operator=operator,
+    )
 
 
 class StatusCounts(BaseModel):
