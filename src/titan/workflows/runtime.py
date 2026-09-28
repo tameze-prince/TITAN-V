@@ -130,7 +130,7 @@ class TitanWorkflow:
                                 ),
                             )
                         except TimeoutError:
-                            await workflow.execute_activity(
+                            expiry_status = await workflow.execute_activity(
                                 mark_workflow_approval_expired,
                                 args=(
                                     request.workflow_id,
@@ -141,15 +141,37 @@ class TitanWorkflow:
                                 start_to_close_timeout=timedelta(seconds=30),
                                 retry_policy=RETRY_POLICY,
                             )
-                            return WorkflowResult(
-                                workflow_id=request.workflow_id,
-                                status="EXPIRED",
-                                completed_task_ids=tuple(completed_task_ids),
-                                execution_waves=schedule.waves,
-                                estimated_schedule_cost=schedule.estimated_cost,
-                                estimated_makespan_ms=schedule.estimated_makespan_ms,
-                                run_id=run_id,
-                            )
+                            if expiry_status == "EXPIRED":
+                                return WorkflowResult(
+                                    workflow_id=request.workflow_id,
+                                    status="EXPIRED",
+                                    completed_task_ids=tuple(completed_task_ids),
+                                    execution_waves=schedule.waves,
+                                    estimated_schedule_cost=schedule.estimated_cost,
+                                    estimated_makespan_ms=schedule.estimated_makespan_ms,
+                                    run_id=run_id,
+                                )
+                            if expiry_status == "REJECTED":
+                                await workflow.execute_activity(
+                                    mark_workflow_rejected,
+                                    args=(
+                                        request.workflow_id,
+                                        run_id,
+                                        task_id,
+                                        "Task approval rejected before timeout was finalized",
+                                    ),
+                                    start_to_close_timeout=timedelta(seconds=30),
+                                    retry_policy=RETRY_POLICY,
+                                )
+                                return WorkflowResult(
+                                    workflow_id=request.workflow_id,
+                                    status="REJECTED",
+                                    completed_task_ids=tuple(completed_task_ids),
+                                    execution_waves=schedule.waves,
+                                    estimated_schedule_cost=schedule.estimated_cost,
+                                    estimated_makespan_ms=schedule.estimated_makespan_ms,
+                                    run_id=run_id,
+                                )
 
                     if task_id in self._rejected_tasks:
                         await workflow.execute_activity(
