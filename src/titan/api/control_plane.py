@@ -490,7 +490,6 @@ async def get_project_control_plane(
             .select_from(TaskModel)
             .where(
                 TaskModel.project_id == project_id,
-                TaskModel.approval_requirement != "NONE",
                 TaskModel.status == "WAITING_APPROVAL",
             )
         )
