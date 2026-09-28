@@ -32,6 +32,7 @@ from titan.runtime.memory import MemoryStore
 from titan.runtime.policy_store import PolicyDefinition, PolicyVersionStore
 from titan.runtime.model_router import BudgetExceeded, ModelBudget, ModelSelectionRequest
 from titan.runtime.operator_auth import OperatorIdentity, require_operator
+from titan.runtime.governance import task_requires_human_approval
 from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
 from titan.runtime.scheduler import DependencyAwareScheduler, TaskScheduleError, TaskSchedulingProfile
 from titan.runtime.planning_service import persist_task_graph
@@ -1715,6 +1716,15 @@ async def create_and_start_workflow(
         task_profiles=tuple(task_profiles),
         max_project_cost=settings.orchestration_max_cost,
         precompleted_task_ids=precompleted_task_ids,
+        approval_task_ids=tuple(
+            str(task.id)
+            for task in tasks
+            if task_requires_human_approval(
+                risk_level=task.risk_level,
+                approval_requirement=task.approval_requirement,
+            )
+        ),
+        approval_timeout_seconds=max(1, settings.human_approval_timeout_seconds),
     )
 
     try:
