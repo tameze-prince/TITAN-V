@@ -153,16 +153,22 @@ async def _load_jwks(jwks_url: str) -> list[dict[str, Any]]:
             return _jwks_cache[1]
 
         timeout = httpx.Timeout(settings.oidc_request_timeout_seconds)
-        async with httpx.AsyncClient(
-            timeout=timeout,
-            follow_redirects=False,
-        ) as client:
-            response = await client.get(
-                jwks_url,
-                headers={"Accept": "application/json"},
-            )
-            response.raise_for_status()
-            document = response.json()
+        try:
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                follow_redirects=False,
+            ) as client:
+                response = await client.get(
+                    jwks_url,
+                    headers={"Accept": "application/json"},
+                )
+                response.raise_for_status()
+                document = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unable to retrieve OIDC signing keys",
+            ) from exc
 
         keys = document.get("keys") if isinstance(document, dict) else None
         if not isinstance(keys, list) or not keys:
