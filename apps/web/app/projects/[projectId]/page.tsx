@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { titanFetch } from "../../../lib/api";
 import type { ProjectOverview, StatusCounts } from "../../../lib/types";
+import { LiveEvents } from "./LiveEvents";
 import { RecoveryControls } from "./RecoveryControls";
 
 function Counts({ title, counts }: { title: string; counts: StatusCounts }) {
@@ -150,25 +151,10 @@ export default async function ProjectPage({
         </section>
 
         <section className="layout">
-          <div className="card">
-            <h2>Recent events</h2>
-            <div className="stack">
-              {project.recent_events.slice(0, 10).map((event) => (
-                <div className="event" key={event.id}>
-                  <div className="row">
-                    <strong>{event.type}</strong>
-                    <span className="muted">{event.actor_type}</span>
-                  </div>
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    {new Date(event.occurred_at).toLocaleString()}
-                  </div>
-                </div>
-              ))}
-              {project.recent_events.length === 0 ? (
-                <p className="muted">No events recorded.</p>
-              ) : null}
-            </div>
-          </div>
+          <LiveEvents
+            projectId={projectId}
+            initialEvents={project.recent_events}
+          />
 
           <div className="card">
             <h2>Explainability</h2>
