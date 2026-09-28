@@ -4,6 +4,7 @@ import { titanFetch } from "../../../lib/api";
 import type { ProjectOverview, StatusCounts } from "../../../lib/types";
 import { LiveEvents } from "./LiveEvents";
 import { RecoveryControls } from "./RecoveryControls";
+import { TaskApprovalControls } from "./TaskApprovalControls";
 
 function Counts({ title, counts }: { title: string; counts: StatusCounts }) {
   return (
@@ -111,6 +112,11 @@ export default async function ProjectPage({
         <RecoveryControls
           projectId={projectId}
           actions={project.recovery_actions}
+        />
+
+        <TaskApprovalControls
+          projectId={projectId}
+          actions={project.task_approval_actions}
         />
 
         <section className="layout">
