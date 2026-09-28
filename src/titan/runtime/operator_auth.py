@@ -16,6 +16,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "control_plane:read",
             "recovery:approve",
             "recovery:rollback",
+            "task:approve",
         }
     ),
     "admin": frozenset(
@@ -23,6 +24,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "control_plane:read",
             "recovery:approve",
             "recovery:rollback",
+            "task:approve",
             "policy:admin",
         }
     ),
