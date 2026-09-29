@@ -26,7 +26,7 @@ RETRY_POLICY = RetryPolicy(initial_interval=timedelta(seconds=1), maximum_attemp
 @workflow.defn
 class TitanWorkflow:
     def __init__(self) -> None:
-        self._approved_actors: dict[str, set[str]] = {}
+        self._approval_counts: dict[str, int] = {}
         self._rejected_tasks: dict[str, str] = {}
         self._rejection_actors: dict[str, tuple[str, str]] = {}
 
@@ -35,9 +35,13 @@ class TitanWorkflow:
         self,
         task_id: str,
         operator_subject: str,
+        approval_count: int,
     ) -> None:
         self._rejected_tasks.pop(task_id, None)
-        self._approved_actors.setdefault(task_id, set()).add(operator_subject)
+        self._approval_counts[task_id] = max(
+            approval_count,
+            self._approval_counts.get(task_id, 0),
+        )
 
     @workflow.signal
     async def reject_task(
@@ -47,7 +51,7 @@ class TitanWorkflow:
         operator_subject: str = "unknown",
         operator_role: str = "unknown",
     ) -> None:
-        self._approved_actors.pop(task_id, None)
+        self._approval_counts.pop(task_id, None)
         self._rejected_tasks[task_id] = reason or "Task approval rejected by operator"
         self._rejection_actors[task_id] = (operator_subject, operator_role)
 
@@ -140,7 +144,7 @@ class TitanWorkflow:
                         try:
                             await workflow.wait_condition(
                                 lambda task_id=task_id: (
-                                    len(self._approved_actors.get(task_id, set()))
+                                    self._approval_counts.get(task_id, 0)
                                     >= approval_quorums.get(task_id, 1)
                                     or task_id in self._rejected_tasks
                                 ),
