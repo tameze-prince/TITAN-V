@@ -1450,6 +1450,7 @@ async def decide_task_approval(
                 "approve_task",
                 str(task.id),
                 operator.subject,
+                approved_count,
             )
         else:
             await handle.signal(
