@@ -181,8 +181,11 @@ def task_requires_human_approval(
     *,
     risk_level: str,
     approval_requirement: str,
+    approval_quorum: int = 1,
 ) -> bool:
     """Return whether a task must pass the Human-in-the-Loop gate."""
+    if approval_quorum > 1:
+        return True
     if approval_requirement not in {"", "NONE"}:
         return True
     return RISK_ORDER.get(risk_level, 0) >= RISK_ORDER["R2"]
