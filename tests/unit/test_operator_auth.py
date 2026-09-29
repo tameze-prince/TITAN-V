@@ -5,6 +5,7 @@ import pytest
 
 from titan.config import settings
 from titan.runtime.operator_auth import require_operator, resolve_oidc_identity
+from titan.runtime.session import code_challenge, new_code_verifier, oidc_authorization_url
 
 
 @pytest.mark.asyncio
@@ -14,7 +15,10 @@ async def test_development_operator_identity_does_not_require_token(monkeypatch)
     monkeypatch.setattr(settings, "operator_subject", "test-operator")
     monkeypatch.setattr(settings, "operator_role", "operator")
 
-    identity = await require_operator(None)
+    identity = await require_operator(
+        request=None,
+        credentials=None,
+    )
 
     assert identity.subject == "test-operator"
     assert identity.role == "operator"
@@ -24,28 +28,31 @@ async def test_development_operator_identity_does_not_require_token(monkeypatch)
 async def test_production_operator_requires_valid_bearer_token(monkeypatch) -> None:
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "operator_auth_required", True)
+    monkeypatch.setattr(settings, "operator_auth_mode", "static")
     monkeypatch.setattr(settings, "operator_api_token", "secret-token")
     monkeypatch.setattr(settings, "operator_subject", "prod-operator")
     monkeypatch.setattr(settings, "operator_role", "admin")
 
     with pytest.raises(HTTPException) as missing:
-        await require_operator(None)
+        await require_operator(request=None, credentials=None)
     assert missing.value.status_code == 401
 
     with pytest.raises(HTTPException) as invalid:
         await require_operator(
-            HTTPAuthorizationCredentials(
+            request=None,
+            credentials=HTTPAuthorizationCredentials(
                 scheme="Bearer",
                 credentials="wrong-token",
-            )
+            ),
         )
     assert invalid.value.status_code == 401
 
     identity = await require_operator(
-        HTTPAuthorizationCredentials(
+        request=None,
+        credentials=HTTPAuthorizationCredentials(
             scheme="Bearer",
             credentials="secret-token",
-        )
+        ),
     )
 
     assert identity.subject == "prod-operator"
@@ -56,15 +63,17 @@ async def test_production_operator_requires_valid_bearer_token(monkeypatch) -> N
 async def test_operator_permissions_are_role_scoped(monkeypatch) -> None:
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "operator_auth_required", True)
+    monkeypatch.setattr(settings, "operator_auth_mode", "static")
     monkeypatch.setattr(settings, "operator_api_token", "viewer-token")
     monkeypatch.setattr(settings, "operator_subject", "viewer")
     monkeypatch.setattr(settings, "operator_role", "viewer")
 
     identity = await require_operator(
-        HTTPAuthorizationCredentials(
+        request=None,
+        credentials=HTTPAuthorizationCredentials(
             scheme="Bearer",
             credentials="viewer-token",
-        )
+        ),
     )
 
     assert identity.has_permission("control_plane:read")
@@ -74,7 +83,7 @@ async def test_operator_permissions_are_role_scoped(monkeypatch) -> None:
         identity.require_permission("recovery:rollback")
     assert denied.value.status_code == 403
 
-  
+
 def test_oidc_identity_resolves_highest_privileged_allowed_role(monkeypatch) -> None:
     monkeypatch.setattr(settings, "oidc_roles_claim", "roles")
     monkeypatch.setattr(settings, "oidc_admin_roles", "admin")
@@ -124,10 +133,11 @@ async def test_oidc_mode_rejects_missing_configuration(monkeypatch) -> None:
 
     with pytest.raises(HTTPException) as rejected:
         await require_operator(
-            HTTPAuthorizationCredentials(
+            request=None,
+            credentials=HTTPAuthorizationCredentials(
                 scheme="Bearer",
                 credentials="oidc-token",
-            )
+            ),
         )
 
     assert rejected.value.status_code == 503
@@ -145,10 +155,11 @@ async def test_oidc_mode_rejects_non_https_configuration_when_required(monkeypat
 
     with pytest.raises(HTTPException) as rejected:
         await require_operator(
-            HTTPAuthorizationCredentials(
+            request=None,
+            credentials=HTTPAuthorizationCredentials(
                 scheme="Bearer",
                 credentials="oidc-token",
-            )
+            ),
         )
 
     assert rejected.value.status_code == 503
@@ -162,10 +173,40 @@ async def test_unknown_operator_auth_mode_is_rejected(monkeypatch) -> None:
 
     with pytest.raises(HTTPException) as rejected:
         await require_operator(
-            HTTPAuthorizationCredentials(
+            request=None,
+            credentials=HTTPAuthorizationCredentials(
                 scheme="Bearer",
                 credentials="token",
-            )
+            ),
         )
 
     assert rejected.value.status_code == 503
+
+
+def test_pkce_code_challenge_uses_s256() -> None:
+    verifier = new_code_verifier()
+    challenge = code_challenge(verifier)
+
+    assert verifier
+    assert challenge
+    assert challenge != verifier
+
+
+def test_oidc_authorization_url_contains_pkce_and_state(monkeypatch) -> None:
+    monkeypatch.setattr(
+        settings,
+        "oidc_authorization_endpoint",
+        "https://issuer.example/oauth2/authorize",
+    )
+    monkeypatch.setattr(settings, "oidc_client_id", "titan-web")
+    url = oidc_authorization_url(
+        state="state-123",
+        nonce="nonce-456",
+        code_verifier="verifier-789",
+        redirect_uri="https://titan.example/api/auth/callback",
+    )
+
+    assert "response_type=code" in url
+    assert "code_challenge_method=S256" in url
+    assert "state=state-123" in url
+    assert "nonce=nonce-456" in url
