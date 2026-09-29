@@ -2,6 +2,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 import pytest
+from starlette.requests import Request
 
 from titan.config import settings
 from titan.runtime.operator_auth import require_operator, resolve_oidc_identity
@@ -210,3 +211,40 @@ def test_oidc_authorization_url_contains_pkce_and_state(monkeypatch) -> None:
     assert "code_challenge_method=S256" in url
     assert "state=state-123" in url
     assert "nonce=nonce-456" in url
+
+
+@pytest.mark.asyncio
+async def test_oidc_session_cookie_path_returns_session_identity(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "operator_auth_required", True)
+    monkeypatch.setattr(settings, "operator_auth_mode", "oidc")
+
+    from titan.runtime import operator_auth
+
+    async def fake_session_identity(_request):
+        return operator_auth.OperatorIdentity(
+            subject="session-user",
+            role="operator",
+            auth_method="session",
+            issuer="https://issuer.example",
+        )
+
+    monkeypatch.setattr(
+        operator_auth,
+        "_authenticate_session_cookie",
+        fake_session_identity,
+    )
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/auth/session",
+            "headers": [],
+            "query_string": b"",
+        }
+    )
+    identity = await require_operator(request=request, credentials=None)
+
+    assert identity.subject == "session-user"
+    assert identity.auth_method == "session"
