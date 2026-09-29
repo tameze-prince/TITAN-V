@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     oidc_redirect_uri: str | None = None
     oidc_scopes: str = "openid profile email"
     operator_session_cookie_name: str = "titan_session"
+    oidc_state_cookie_name: str = "titan_oidc_state"
     operator_session_ttl_seconds: int = 28_800
     operator_session_rotation_seconds: int = 3_600
     operator_session_cookie_secure: bool = True
