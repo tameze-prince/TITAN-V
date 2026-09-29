@@ -16,6 +16,7 @@ from titan.persistence.models import (
     ProjectStateModel,
     TaskGraphModel,
     TaskModel,
+    TaskApprovalDecisionModel,
     WorkflowModel,
 )
 from titan.runtime.explainability import build_project_explainability_trace
@@ -105,6 +106,8 @@ class TaskApprovalAction(BaseModel):
     objective: str
     risk_level: str
     status: str
+    approval_quorum: int
+    approval_count: int
     action: str
     reason: str
 
@@ -458,6 +461,24 @@ async def get_project_control_plane(
             .limit(50)
         )
     )
+    approval_count_rows = await session.execute(
+        select(
+            TaskApprovalDecisionModel.task_id,
+            func.count().label("approval_count"),
+        )
+        .where(
+            TaskApprovalDecisionModel.task_id.in_(
+                [task.id for task in task_approval_tasks]
+            ),
+            TaskApprovalDecisionModel.decision == "APPROVE",
+        )
+        .group_by(TaskApprovalDecisionModel.task_id)
+    )
+    approval_counts = {
+        task_id: int(count)
+        for task_id, count in approval_count_rows
+    }
+
     task_approval_actions = [
         TaskApprovalAction(
             task_id=task.id,
@@ -466,14 +487,20 @@ async def get_project_control_plane(
             objective=task.objective,
             risk_level=task.risk_level,
             status=task.status,
+            approval_quorum=max(1, task.approval_quorum),
+            approval_count=approval_counts.get(task.id, 0),
             action="APPROVE_OR_REJECT_TASK",
-            reason="Task is waiting for an operator approval before execution",
+            reason=(
+                "Task is waiting for operator approvals "
+                f"({approval_counts.get(task.id, 0)}/{max(1, task.approval_quorum)})"
+            ),
         )
         for task in task_approval_tasks
         if task.workflow_id is not None
         and task_requires_human_approval(
             risk_level=task.risk_level,
             approval_requirement=task.approval_requirement,
+            approval_quorum=task.approval_quorum,
         )
     ]
 
