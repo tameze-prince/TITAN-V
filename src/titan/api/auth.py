@@ -65,7 +65,10 @@ def _require_oidc_browser_config() -> tuple[str, str, str]:
             detail='OIDC client id is not configured',
         )
     if settings.oidc_require_https:
-        parsed_urls = [urlparse(value) for value in (authorization_endpoint, token_endpoint)]
+        endpoint_values = [authorization_endpoint, token_endpoint]
+        if settings.oidc_userinfo_endpoint:
+            endpoint_values.append(settings.oidc_userinfo_endpoint)
+        parsed_urls = [urlparse(value) for value in endpoint_values]
         if any(parsed.scheme.lower() != 'https' for parsed in parsed_urls):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
