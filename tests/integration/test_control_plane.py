@@ -7,7 +7,13 @@ from sqlalchemy import select
 
 from titan.api.app import app
 from titan.persistence.database import SessionFactory
-from titan.persistence.models import EventModel, ProjectModel, TaskModel, WorkflowModel
+from titan.persistence.models import (
+    EventModel,
+    ProjectModel,
+    TaskApprovalDecisionModel,
+    TaskModel,
+    WorkflowModel,
+)
 
 
 pytestmark = pytest.mark.skipif(
@@ -159,8 +165,21 @@ async def test_control_plane_lists_waiting_task_approval() -> None:
             status="WAITING_APPROVAL",
             risk_level="R2",
             approval_requirement="NONE",
+            approval_quorum=2,
         )
         session.add(task)
+        await session.flush()
+        session.add(
+            TaskApprovalDecisionModel(
+                project_id=project.id,
+                workflow_id=workflow.id,
+                task_id=task.id,
+                operator_subject="operator-a",
+                operator_role="operator",
+                decision="APPROVE",
+                reason="First approver",
+            )
+        )
         await session.commit()
         project_id = project.id
 
@@ -177,6 +196,8 @@ async def test_control_plane_lists_waiting_task_approval() -> None:
     assert len(actions) == 1
     assert actions[0]["risk_level"] == "R2"
     assert actions[0]["task_id"] == str(task.id)
+    assert actions[0]["approval_quorum"] == 2
+    assert actions[0]["approval_count"] == 1
 
     async with SessionFactory() as session:
         project = await session.scalar(
