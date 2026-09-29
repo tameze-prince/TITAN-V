@@ -25,7 +25,9 @@ export async function GET(
         Accept: "text/event-stream",
         ...(operatorToken
           ? { Authorization: "Bearer " + operatorToken }
-          : {}),
+          : request.headers.get("cookie")
+            ? { Cookie: request.headers.get("cookie")! }
+            : {}),
       },
       cache: "no-store",
     },
