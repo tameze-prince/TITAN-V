@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio.client import Client
 
@@ -1292,6 +1292,7 @@ async def create_task(
     return task
 
 
+
 @app.post(
     "/api/v1/projects/{project_id}/tasks/{task_id}/approval",
     response_model=TaskApprovalResponse,
@@ -1307,10 +1308,12 @@ async def decide_task_approval(
     operator.require_permission("task:approve")
 
     task = await session.scalar(
-        select(TaskModel).where(
+        select(TaskModel)
+        .where(
             TaskModel.id == task_id,
             TaskModel.project_id == project_id,
         )
+        .with_for_update()
     )
     if task is None:
         raise HTTPException(
@@ -1340,17 +1343,67 @@ async def decide_task_approval(
             detail="Task workflow is not running with a Temporal workflow id",
         )
 
+    existing = await session.scalar(
+        select(TaskApprovalDecisionModel)
+        .where(
+            TaskApprovalDecisionModel.task_id == task.id,
+            TaskApprovalDecisionModel.operator_subject == operator.subject,
+        )
+        .with_for_update()
+    )
+    requested_decision = "APPROVE" if payload.approved else "REJECT"
+
+    if existing is not None and existing.decision != requested_decision:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This operator has already recorded the opposite decision",
+        )
+
     reason = payload.reason or (
         "Task approved by operator"
         if payload.approved
         else "Task rejected by operator"
     )
-    task.status = "APPROVED" if payload.approved else "REJECTED"
+
+    if existing is None:
+        existing = TaskApprovalDecisionModel(
+            project_id=project_id,
+            workflow_id=workflow.id,
+            task_id=task.id,
+            operator_user_id=operator.user_id,
+            operator_subject=operator.subject,
+            operator_role=operator.role,
+            decision=requested_decision,
+            reason=reason,
+        )
+        session.add(existing)
+
+    approved_count = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(TaskApprovalDecisionModel)
+            .where(
+                TaskApprovalDecisionModel.task_id == task.id,
+                TaskApprovalDecisionModel.decision == "APPROVE",
+            )
+        )
+        or 0
+    )
+
+    if payload.approved:
+        final_approval = approved_count >= max(1, task.approval_quorum)
+        if final_approval:
+            task.status = "APPROVED"
+        event_type = "TaskApprovalGranted" if final_approval else "TaskApprovalRecorded"
+    else:
+        final_approval = False
+        task.status = "REJECTED"
+        event_type = "TaskApprovalRejected"
 
     session.add(
         EventModel(
             project_id=project_id,
-            type="TaskApprovalGranted" if payload.approved else "TaskApprovalRejected",
+            type=event_type,
             actor_type="OPERATOR",
             actor_id=None,
             actor_subject=operator.subject,
@@ -1363,6 +1416,8 @@ async def decide_task_approval(
                 "operator_auth_method": operator.auth_method,
                 "operator_issuer": operator.issuer,
                 "reason": reason,
+                "approval_quorum": task.approval_quorum,
+                "approval_count": approved_count,
             },
         )
     )
@@ -1372,9 +1427,16 @@ async def decide_task_approval(
             ProjectStateModel.project_id == project_id
         )
     )
-    if state is not None and payload.approved:
-        state.status = "RUNNING"
-        state.phase = "EXECUTION"
+    if state is not None:
+        if payload.approved and final_approval:
+            state.status = "RUNNING"
+            state.phase = "EXECUTION"
+        elif payload.approved:
+            state.status = "WAITING_HUMAN"
+            state.phase = "WAITING_APPROVAL"
+        else:
+            state.status = "REJECTED"
+            state.phase = "HUMAN_REJECTED"
         state.version += 1
 
     await session.commit()
@@ -1382,7 +1444,11 @@ async def decide_task_approval(
     handle = temporal_client.get_workflow_handle(workflow.temporal_workflow_id)
     try:
         if payload.approved:
-            await handle.signal("approve_task", str(task.id))
+            await handle.signal(
+                "approve_task",
+                str(task.id),
+                operator.subject,
+            )
         else:
             await handle.signal(
                 "reject_task",
@@ -1392,33 +1458,36 @@ async def decide_task_approval(
                 operator.role,
             )
     except Exception as exc:
-        task.status = "WAITING_APPROVAL"
-        compensation_state = await session.scalar(
-            select(ProjectStateModel).where(
-                ProjectStateModel.project_id == project_id
+        if payload.approved:
+            task.status = "WAITING_APPROVAL"
+            compensation_state = await session.scalar(
+                select(ProjectStateModel).where(
+                    ProjectStateModel.project_id == project_id
+                )
             )
-        )
-        if compensation_state is not None:
-            compensation_state.status = "WAITING_HUMAN"
-            compensation_state.phase = "WAITING_APPROVAL"
-            compensation_state.version += 1
+            if compensation_state is not None:
+                compensation_state.status = "WAITING_HUMAN"
+                compensation_state.phase = "WAITING_APPROVAL"
+                compensation_state.version += 1
         session.add(
             EventModel(
                 project_id=project_id,
                 type="TaskApprovalSignalFailed",
                 actor_type="SYSTEM",
+                actor_subject=operator.subject,
                 aggregate_type="TASK",
                 aggregate_id=task.id,
                 payload={
                     "operator_subject": operator.subject,
-                    "decision": "APPROVED" if payload.approved else "REJECTED",
+                    "decision": requested_decision,
                     "error_type": type(exc).__name__,
                     "error_message": str(exc),
+                    "approval_quorum": task.approval_quorum,
+                    "approval_count": approved_count,
                 },
             )
         )
         await session.commit()
-
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Temporal workflow could not receive the approval decision",
@@ -1428,9 +1497,17 @@ async def decide_task_approval(
         project_id=project_id,
         task_id=task.id,
         workflow_id=workflow.id,
-        decision="APPROVED" if payload.approved else "REJECTED",
+        decision=(
+            "APPROVED"
+            if payload.approved and final_approval
+            else "RECORDED"
+            if payload.approved
+            else "REJECTED"
+        ),
         reason=reason,
         status=task.status,
+        approval_quorum=task.approval_quorum,
+        approval_count=approved_count,
     )
 
 
@@ -1748,6 +1825,16 @@ async def create_and_start_workflow(
             if task_requires_human_approval(
                 risk_level=task.risk_level,
                 approval_requirement=task.approval_requirement,
+                approval_quorum=task.approval_quorum,
+            )
+        ),
+        approval_quorums=tuple(
+            (str(task.id), max(1, task.approval_quorum))
+            for task in tasks
+            if task_requires_human_approval(
+                risk_level=task.risk_level,
+                approval_requirement=task.approval_requirement,
+                approval_quorum=task.approval_quorum,
             )
         ),
         approval_timeout_seconds=max(1, settings.human_approval_timeout_seconds),
