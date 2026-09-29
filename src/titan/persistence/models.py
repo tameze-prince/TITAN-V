@@ -439,6 +439,9 @@ class TaskModel(Base):
     approval_requirement: Mapped[str] = mapped_column(
         String(32), nullable=False, default="NONE", server_default="NONE"
     )
+    approval_quorum: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -451,6 +454,48 @@ class TaskModel(Base):
     workflow: Mapped[WorkflowModel | None] = relationship(back_populates="tasks")
     owner_agent: Mapped[AgentModel | None] = relationship(back_populates="tasks")
     runs: Mapped[list["RunModel"]] = relationship(back_populates="task")
+
+
+class TaskApprovalDecisionModel(Base):
+    __tablename__ = "task_approval_decisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "task_id",
+            "operator_subject",
+            name="uq_task_approval_decisions_task_operator",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    workflow_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workflows.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    operator_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("operator_users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    operator_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    operator_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class RunModel(Base):
