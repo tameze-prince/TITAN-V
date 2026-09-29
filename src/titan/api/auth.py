@@ -24,6 +24,7 @@ from titan.runtime.session import (
     new_state_token,
     oidc_authorization_url,
     revoke_operator_session,
+    sha256,
     upsert_operator_user,
 )
 
@@ -369,7 +370,7 @@ async def logout(
         async with SessionFactory() as session:
             row = await session.scalar(
                 select(OperatorSessionModel).where(
-                    OperatorSessionModel.token_hash == __import__('hashlib').sha256(raw.encode('utf-8')).hexdigest()
+                    OperatorSessionModel.token_hash == sha256(raw)
                 )
             )
             if row is not None and row.revoked_at is None:
