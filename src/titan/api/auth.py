@@ -191,6 +191,34 @@ async def oidc_callback(
         id_token,
         nonce=auth_state.nonce,
     )
+
+    access_token = token_document.get("access_token")
+    if settings.oidc_userinfo_endpoint and isinstance(access_token, str):
+        try:
+            timeout = httpx.Timeout(settings.oidc_request_timeout_seconds)
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                follow_redirects=False,
+            ) as client:
+                userinfo_response = await client.get(
+                    settings.oidc_userinfo_endpoint,
+                    headers={"Authorization": "Bearer " + access_token},
+                )
+                userinfo_response.raise_for_status()
+                userinfo = userinfo_response.json()
+            if isinstance(userinfo, dict):
+                if userinfo.get("sub") not in {None, claims.get("sub")}:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="OIDC userinfo subject mismatch",
+                    )
+                claims = {**userinfo, **claims}
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="OIDC userinfo request failed",
+            ) from exc
+
     identity = resolve_oidc_identity(claims)
     user = await upsert_operator_user(
         session,
