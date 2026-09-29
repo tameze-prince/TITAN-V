@@ -85,6 +85,8 @@ export type ProjectOverview = {
     objective: string;
     risk_level: string;
     status: string;
+    approval_quorum: number;
+    approval_count: number;
     action: string;
     reason: string;
   }>;
