@@ -220,6 +220,100 @@ class GovernanceDecisionModel(Base):
     )
 
 
+class OperatorUserModel(Base):
+    __tablename__ = "operator_users"
+    __table_args__ = (
+        UniqueConstraint(
+            "issuer",
+            "subject",
+            name="uq_operator_users_issuer_subject",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    issuer: Mapped[str] = mapped_column(String(500), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="viewer", server_default="viewer"
+    )
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="ACTIVE", server_default="ACTIVE"
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    sessions: Mapped[list["OperatorSessionModel"]] = relationship(
+        back_populates="user", passive_deletes=True
+    )
+
+
+class OperatorSessionModel(Base):
+    __tablename__ = "operator_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("operator_users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rotated_from_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("operator_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    user: Mapped[OperatorUserModel] = relationship(back_populates="sessions")
+
+
+class OidcAuthorizationStateModel(Base):
+    __tablename__ = "oidc_authorization_states"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    state_hash: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True
+    )
+    code_verifier: Mapped[str] = mapped_column(String(255), nullable=False)
+    nonce: Mapped[str] = mapped_column(String(255), nullable=False)
+    redirect_uri: Mapped[str] = mapped_column(String(2_000), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class AgentModel(Base):
     __tablename__ = "agents"
 
