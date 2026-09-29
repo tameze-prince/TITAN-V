@@ -91,7 +91,19 @@ def _cookie_kwargs() -> dict:
 def _clear_cookie(response: Response) -> None:
     response.delete_cookie(
         key=settings.operator_session_cookie_name,
-        path='/',
+        path="/",
+    )
+
+
+def _set_oidc_state_cookie(response: Response, state: str) -> None:
+    response.set_cookie(
+        key=settings.oidc_state_cookie_name,
+        value=state,
+        httponly=True,
+        secure=settings.operator_session_cookie_secure,
+        samesite=settings.operator_session_cookie_samesite,
+        path="/",
+        max_age=max(60, settings.oidc_auth_state_ttl_seconds),
     )
 
 
@@ -131,16 +143,27 @@ async def oidc_start(
             detail=str(exc),
         ) from exc
 
-    return RedirectResponse(target, status_code=status.HTTP_302_FOUND)
+    redirect = RedirectResponse(target, status_code=status.HTTP_302_FOUND)
+    _set_oidc_state_cookie(redirect, state)
+    redirect.headers["Cache-Control"] = "no-store"
+    return redirect
 
 
 @router.post('/oidc/callback', response_model=SessionResponse)
 async def oidc_callback(
+    request: Request,
     payload: OidcCallbackRequest,
     response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> SessionResponse:
     _, token_endpoint, _ = _require_oidc_browser_config()
+
+    state_cookie = request.cookies.get(settings.oidc_state_cookie_name)
+    if not state_cookie or state_cookie != payload.state:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OIDC browser state validation failed",
+        )
 
     try:
         auth_state = await consume_oidc_authorization_state(
