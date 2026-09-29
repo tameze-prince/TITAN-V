@@ -21,6 +21,9 @@ export async function GET(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(request.headers.get("cookie")
+          ? { Cookie: request.headers.get("cookie")! }
+          : {}),
       },
       body: JSON.stringify({ code, state }),
       cache: "no-store",
@@ -35,6 +38,9 @@ export async function GET(request: NextRequest) {
 
   const response = NextResponse.redirect(
     new URL("/", request.url),
+  );
+  response.cookies.delete(
+    process.env.TITAN_OIDC_STATE_COOKIE_NAME ?? "titan_oidc_state",
   );
   const setCookie = upstream.headers.get("set-cookie");
   if (setCookie) {
