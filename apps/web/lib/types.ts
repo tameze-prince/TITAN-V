@@ -1,3 +1,16 @@
+export type OperatorSession = {
+  authenticated: boolean;
+  subject: string;
+  role: string;
+  issuer: string | null;
+  auth_method: string;
+  user_id: string | null;
+  session_id: string | null;
+  email?: string | null;
+  display_name?: string | null;
+  expires_at?: string | null;
+};
+
 export type StatusCounts = {
   total: number;
   by_status: Record<string, number>;
