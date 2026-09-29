@@ -24,6 +24,7 @@ from titan.persistence.models import (
     ProjectStateModel,
     TaskGraphModel,
     TaskModel,
+    TaskApprovalDecisionModel,
     WorkflowModel,
     task_dependencies,
 )
@@ -125,6 +126,7 @@ class TaskCreate(BaseModel):
     objective: str = Field(min_length=1, max_length=10_000)
     risk_level: str = Field(default="R1", pattern=r"^R[0-4]$")
     approval_requirement: str = Field(default="NONE", min_length=1, max_length=32)
+    approval_quorum: int = Field(default=1, ge=1, le=10)
 
 
 class TaskResponse(BaseModel):
@@ -140,6 +142,8 @@ class TaskResponse(BaseModel):
     position: int
     required_capabilities: list[str]
     approval_requirement: str
+    approval_quorum: int
+    approval_quorum: int
 
     model_config = {"from_attributes": True}
 
@@ -156,6 +160,8 @@ class TaskApprovalResponse(BaseModel):
     decision: str
     reason: str
     status: str
+    approval_quorum: int
+    approval_count: int
 
 
 class WorkflowCreate(BaseModel):
@@ -1267,6 +1273,7 @@ async def create_task(
         objective=payload.objective,
         risk_level=payload.risk_level,
         approval_requirement=payload.approval_requirement,
+        approval_quorum=payload.approval_quorum,
     )
     session.add(task)
     await session.flush()
