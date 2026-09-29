@@ -117,6 +117,16 @@ def test_governance_denies_model_budget_before_execution() -> None:
     assert "exceeds configured budget" in decision.reason
 
 
+def test_multi_operator_quorum_requires_human_approval() -> None:
+    from titan.runtime.governance import task_requires_human_approval
+
+    assert task_requires_human_approval(
+        risk_level="R1",
+        approval_requirement="NONE",
+        approval_quorum=2,
+    )
+
+
 def test_risk_aware_task_approval_gate() -> None:
     from titan.runtime.governance import task_requires_human_approval
 
