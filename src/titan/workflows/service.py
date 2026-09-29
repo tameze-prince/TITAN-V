@@ -211,6 +211,7 @@ async def build_workflow_input(
             if task_requires_human_approval(
                 risk_level=tasks_by_id[task_id].risk_level,
                 approval_requirement=tasks_by_id[task_id].approval_requirement,
+                approval_quorum=tasks_by_id[task_id].approval_quorum,
             )
         ),
         approval_quorums=tuple(
