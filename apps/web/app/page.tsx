@@ -1,7 +1,12 @@
 import Link from "next/link";
 
 import { titanFetch } from "../lib/api";
-import type { ControlPlaneOverview, ProjectSummary } from "../lib/types";
+import type {
+  ControlPlaneOverview,
+  OperatorSession,
+  ProjectSummary,
+} from "../lib/types";
+import { AuthControls } from "./AuthControls";
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
@@ -14,9 +19,10 @@ function Metric({ label, value }: { label: string; value: number }) {
 
 export default async function HomePage() {
   try {
-    const [overview, projects] = await Promise.all([
+    const [overview, projects, session] = await Promise.all([
       titanFetch<ControlPlaneOverview>("/api/v1/control-plane/overview"),
       titanFetch<ProjectSummary[]>("/api/v1/control-plane/projects"),
+      titanFetch<OperatorSession>("/api/v1/auth/session"),
     ]);
 
     return (
@@ -29,7 +35,7 @@ export default async function HomePage() {
               <strong>Command Center</strong>
             </div>
           </div>
-          <span className="badge success">Operator surface</span>
+          <AuthControls session={session} />
         </header>
 
         <section className="hero">
@@ -117,15 +123,24 @@ export default async function HomePage() {
   } catch (error) {
     return (
       <main className="shell">
+        <div className="topbar">
+          <div className="brand">
+            <div className="brand-mark">TV</div>
+            <div>
+              <p className="eyebrow">TITAN V.</p>
+              <strong>Command Center</strong>
+            </div>
+          </div>
+          <AuthControls session={null} />
+        </div>
         <div className="card error">
-          <p className="eyebrow">Control plane unavailable</p>
-          <h1>Cannot reach TITAN Core.</h1>
+          <p className="eyebrow">Operator session required</p>
+          <h1>Sign in to access the control plane.</h1>
           <p style={{ marginTop: 10 }}>
-            Start the FastAPI service and set <code>TITAN_API_URL</code> for the
-            Command Center.
+            Use the configured OIDC identity to open the governed operator surface.
           </p>
           <p className="muted" style={{ marginTop: 10 }}>
-            {error instanceof Error ? error.message : "Unknown API error"}
+            {error instanceof Error ? error.message : "Authentication required"}
           </p>
         </div>
       </main>
