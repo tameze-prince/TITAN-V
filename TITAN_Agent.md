@@ -4,7 +4,7 @@
 > **Version:** 0.1.0  
 > **Document:** `TITAN_Agent.md`  
 > **Purpose:** Single evolving source of truth for the conception, architecture, implementation, validation, evolution, and operation of TITAN V.  
-> **Last updated:** 2026-09-28
+> **Last updated:** 2026-09-29
 
 ---
 
@@ -10960,6 +10960,7 @@ Implemented:
 [X] OIDC authorization-code flow
 [X] PKCE S256 challenge
 [X] state + nonce protection
+[X] Browser-bound OIDC state cookie
 [X] Server-side OIDC code exchange
 [X] Persistent operator user model
 [X] Opaque HttpOnly browser session cookie
@@ -10972,6 +10973,7 @@ Implemented:
 [X] Distinct-operator approval quorum
 [X] Quorum progress in Control Plane and Command Center
 [X] Temporal wait condition based on approval quorum
+[X] Idempotent Temporal quorum signal from durable database count
 ~~~
 
 ## Browser authentication
