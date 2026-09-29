@@ -408,6 +408,10 @@ class TaskModel(Base):
             "risk_level IN ('R0', 'R1', 'R2', 'R3', 'R4')",
             name="risk_level_valid",
         ),
+        CheckConstraint(
+            "approval_quorum BETWEEN 1 AND 10",
+            name="approval_quorum_range",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
