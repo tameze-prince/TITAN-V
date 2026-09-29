@@ -23,6 +23,7 @@ def _serialize_event(event: EventModel) -> str:
         "project_id": str(event.project_id) if event.project_id else None,
         "type": event.type,
         "actor_type": event.actor_type,
+        "actor_subject": event.actor_subject,
         "actor_id": str(event.actor_id) if event.actor_id else None,
         "aggregate_type": event.aggregate_type,
         "aggregate_id": str(event.aggregate_id) if event.aggregate_id else None,
