@@ -26,14 +26,18 @@ RETRY_POLICY = RetryPolicy(initial_interval=timedelta(seconds=1), maximum_attemp
 @workflow.defn
 class TitanWorkflow:
     def __init__(self) -> None:
-        self._approved_tasks: set[str] = set()
+        self._approved_actors: dict[str, set[str]] = {}
         self._rejected_tasks: dict[str, str] = {}
         self._rejection_actors: dict[str, tuple[str, str]] = {}
 
     @workflow.signal
-    async def approve_task(self, task_id: str) -> None:
+    async def approve_task(
+        self,
+        task_id: str,
+        operator_subject: str,
+    ) -> None:
         self._rejected_tasks.pop(task_id, None)
-        self._approved_tasks.add(task_id)
+        self._approved_actors.setdefault(task_id, set()).add(operator_subject)
 
     @workflow.signal
     async def reject_task(
@@ -43,7 +47,7 @@ class TitanWorkflow:
         operator_subject: str = "unknown",
         operator_role: str = "unknown",
     ) -> None:
-        self._approved_tasks.discard(task_id)
+        self._approved_actors.pop(task_id, None)
         self._rejected_tasks[task_id] = reason or "Task approval rejected by operator"
         self._rejection_actors[task_id] = (operator_subject, operator_role)
 
@@ -84,6 +88,8 @@ class TitanWorkflow:
             max_project_cost=request.max_project_cost,
             precompleted_task_ids=request.precompleted_task_ids,
         )
+
+        approval_quorums = dict(request.approval_quorums)
 
         try:
             for wave in schedule.waves:
@@ -134,7 +140,8 @@ class TitanWorkflow:
                         try:
                             await workflow.wait_condition(
                                 lambda task_id=task_id: (
-                                    task_id in self._approved_tasks
+                                    len(self._approved_actors.get(task_id, set()))
+                                    >= approval_quorums.get(task_id, 1)
                                     or task_id in self._rejected_tasks
                                 ),
                                 timeout=timedelta(
