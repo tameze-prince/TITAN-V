@@ -333,7 +333,7 @@ async def _authenticate_session_cookie(
 
 
 async def require_operator(
-    request: Request,
+    request: Request = None,
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
 ) -> OperatorIdentity:
     if not settings.operator_auth_required and settings.environment == "development":
@@ -377,7 +377,7 @@ async def require_operator(
             detail=f"Unsupported operator authentication mode '{settings.operator_auth_mode}'",
         )
 
-    if mode == "oidc":
+    if mode == "oidc" and request is not None:
         session_identity = await _authenticate_session_cookie(request)
         if session_identity is not None:
             return session_identity
