@@ -23,7 +23,9 @@ export async function POST(
         "Content-Type": "application/json",
         ...(operatorToken
           ? { Authorization: "Bearer " + operatorToken }
-          : {}),
+          : request.headers.get("cookie")
+            ? { Cookie: request.headers.get("cookie")! }
+            : {}),
       },
       body,
       cache: "no-store",
