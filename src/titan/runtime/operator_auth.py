@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass
 from secrets import compare_digest
 from typing import Any
 
 import httpx
 import jwt
-from fastapi import HTTPException, Security, status
+from fastapi import HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from titan.config import settings
+from titan.persistence.database import SessionFactory
+from titan.runtime.session import resolve_operator_session
 
 
 _bearer = HTTPBearer(auto_error=False)
@@ -46,6 +49,8 @@ class OperatorIdentity:
     role: str
     auth_method: str = "static"
     issuer: str | None = None
+    user_id: uuid.UUID | None = None
+    session_id: uuid.UUID | None = None
 
     def has_permission(self, permission: str) -> bool:
         return permission in ROLE_PERMISSIONS.get(self.role, frozenset())
@@ -184,8 +189,14 @@ async def _load_jwks(jwks_url: str) -> list[dict[str, Any]]:
         return _jwks_cache[1]
 
 
-async def _authenticate_oidc_token(token: str) -> OperatorIdentity:
-    issuer, audience, jwks_url = _validate_oidc_configuration()
+
+async def _validate_oidc_claims(
+    token: str,
+    *,
+    audience: str,
+    verify_scope: bool = True,
+) -> dict[str, Any]:
+    issuer, _, jwks_url = _validate_oidc_configuration()
 
     try:
         header = jwt.get_unverified_header(token)
@@ -242,9 +253,7 @@ async def _authenticate_oidc_token(token: str) -> OperatorIdentity:
             audience=audience,
             issuer=issuer,
             leeway=max(0, settings.oidc_clock_skew_seconds),
-            options={
-                "require": ["exp", "iat", "sub", "iss", "aud"],
-            },
+            options={"require": ["exp", "iat", "sub", "iss", "aud"]},
         )
     except (jwt.PyJWTError, ValueError, TypeError) as exc:
         raise HTTPException(
@@ -253,21 +262,78 @@ async def _authenticate_oidc_token(token: str) -> OperatorIdentity:
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
-    required_scope = settings.oidc_required_scope
-    if required_scope:
+    if verify_scope and settings.oidc_required_scope:
         scope_values = _claim_values(claims.get("scope")) | _claim_values(
             claims.get("scp")
         )
-        if required_scope not in scope_values:
+        if settings.oidc_required_scope not in scope_values:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="OIDC token lacks the required TITAN scope",
             )
 
+    return claims
+
+
+async def authenticate_oidc_token(token: str) -> OperatorIdentity:
+    _, audience, _ = _validate_oidc_configuration()
+    claims = await _validate_oidc_claims(
+        token,
+        audience=audience,
+        verify_scope=True,
+    )
     return resolve_oidc_identity(claims)
 
 
+async def validate_oidc_id_token(
+    token: str,
+    *,
+    nonce: str,
+) -> dict[str, Any]:
+    client_id = settings.oidc_client_id
+    if not client_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OIDC client id is not configured",
+        )
+    claims = await _validate_oidc_claims(
+        token,
+        audience=client_id,
+        verify_scope=False,
+    )
+    if claims.get("nonce") != nonce:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="OIDC nonce validation failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return claims
+
+
+async def _authenticate_session_cookie(
+    request: Request,
+) -> OperatorIdentity | None:
+    raw = request.cookies.get(settings.operator_session_cookie_name)
+    if not raw:
+        return None
+    async with SessionFactory() as session:
+        resolved = await resolve_operator_session(session, raw_token=raw)
+        if resolved is None:
+            return None
+        session_row, user = resolved
+        await session.commit()
+    return OperatorIdentity(
+        subject=user.subject,
+        role=user.role,
+        auth_method="session",
+        issuer=user.issuer,
+        user_id=user.id,
+        session_id=session_row.id,
+    )
+
+
 async def require_operator(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
 ) -> OperatorIdentity:
     if not settings.operator_auth_required and settings.environment == "development":
@@ -277,40 +343,47 @@ async def require_operator(
             auth_method="development",
         )
 
-    if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Operator authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
     mode = settings.operator_auth_mode.lower()
-    if mode == "oidc":
-        return await _authenticate_oidc_token(credentials.credentials)
-    if mode != "static":
+
+    if credentials is not None and credentials.scheme.lower() == "bearer":
+        if mode == "oidc":
+            return await authenticate_oidc_token(credentials.credentials)
+
+        if mode == "static":
+            configured = settings.operator_api_token
+            if not configured or not compare_digest(
+                credentials.credentials,
+                configured,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid operator credentials",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            identity = OperatorIdentity(
+                subject=settings.operator_subject,
+                role=settings.operator_role,
+                auth_method="static",
+            )
+            if identity.role not in ROLE_PERMISSIONS:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Unsupported operator role '{identity.role}'",
+                )
+            return identity
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Unsupported operator authentication mode '{settings.operator_auth_mode}'",
         )
 
-    configured = settings.operator_api_token
-    if not configured or not compare_digest(credentials.credentials, configured):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid operator credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    if mode == "oidc":
+        session_identity = await _authenticate_session_cookie(request)
+        if session_identity is not None:
+            return session_identity
 
-    identity = OperatorIdentity(
-        subject=settings.operator_subject,
-        role=settings.operator_role,
-        auth_method="static",
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Operator authentication required",
+        headers={"WWW-Authenticate": "Bearer"},
     )
-
-    if identity.role not in ROLE_PERMISSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Unsupported operator role '{identity.role}'",
-        )
-
-    return identity
