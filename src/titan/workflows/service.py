@@ -213,6 +213,17 @@ async def build_workflow_input(
                 approval_requirement=tasks_by_id[task_id].approval_requirement,
             )
         ),
+        approval_quorums=tuple(
+            (
+                task_id,
+                max(1, tasks_by_id[task_id].approval_quorum),
+            )
+            for task_id in requested_ids
+            if task_requires_human_approval(
+                risk_level=tasks_by_id[task_id].risk_level,
+                approval_requirement=tasks_by_id[task_id].approval_requirement,
+            )
+        ),
         approval_timeout_seconds=max(1, settings.human_approval_timeout_seconds),
         recovery_attempt=recovery_attempt,
         recovery_root_workflow_id=recovery_root_workflow_id,
