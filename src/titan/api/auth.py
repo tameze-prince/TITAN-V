@@ -429,15 +429,22 @@ async def logout(
             )
             if row is not None and row.revoked_at is None:
                 row.revoked_at = datetime.now(UTC)
+                user = await session.scalar(
+                    select(OperatorUserModel).where(
+                        OperatorUserModel.id == row.user_id
+                    )
+                )
                 session.add(
                     EventModel(
                         project_id=None,
                         type='OperatorSessionRevoked',
                         actor_type='OPERATOR',
-                        actor_subject=None,
+                        actor_subject=user.subject if user is not None else None,
                         aggregate_type='OPERATOR_SESSION',
                         aggregate_id=row.id,
-                        payload={},
+                        payload={
+                            'user_id': str(user.id) if user is not None else None,
+                        },
                     )
                 )
                 await session.commit()
