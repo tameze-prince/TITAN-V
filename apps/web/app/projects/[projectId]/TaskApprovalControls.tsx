@@ -96,10 +96,13 @@ export function TaskApprovalControls({
                 <div>
                   <strong>{action.title}</strong>
                   <div className="muted">
-                    {action.status} · risk {action.risk_level}
+                    {action.status} · risk {action.risk_level} · approvals{" "}
+                    {action.approval_count}/{action.approval_quorum}
                   </div>
                 </div>
-                <span className="badge warning">approval required</span>
+                <span className="badge warning">
+                  {action.approval_count}/{action.approval_quorum} approvals
+                </span>
               </div>
 
               <p style={{ marginTop: 10 }}>{action.objective}</p>
