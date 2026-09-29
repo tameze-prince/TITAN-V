@@ -10947,3 +10947,88 @@ TITAN SESSION + MULTI-OPERATOR GOVERNANCE
 The next layer should establish a browser session boundary for the Command Center and extend single-operator approval into delegation, quorum and policy-driven escalation.
 
 ---
+
+# 235. TITAN SESSION + MULTI-OPERATOR GOVERNANCE CHECKPOINT — 2026-09-29
+
+## Status
+
+TITAN now has a server-side browser session boundary and a durable multi-operator approval quorum.
+
+Implemented:
+
+~~~text
+[X] OIDC authorization-code flow
+[X] PKCE S256 challenge
+[X] state + nonce protection
+[X] Server-side OIDC code exchange
+[X] Persistent operator user model
+[X] Opaque HttpOnly browser session cookie
+[X] Session expiration and revocation
+[X] Explicit session rotation endpoint
+[X] Next.js BFF authentication routes
+[X] Command Center sign-in / sign-out surface
+[X] Session cookie forwarding for API mutations and SSE
+[X] Durable task approval decision records
+[X] Distinct-operator approval quorum
+[X] Quorum progress in Control Plane and Command Center
+[X] Temporal wait condition based on approval quorum
+~~~
+
+## Browser authentication
+
+~~~text
+Command Center
+  ↓
+/api/auth/login
+  ↓
+TITAN OIDC start
+  ↓
+OIDC provider
+  ↓
+Authorization code + PKCE
+  ↓
+Next.js callback
+  ↓
+TITAN token exchange
+  ↓
+HttpOnly opaque session
+~~~
+
+The browser never receives the OIDC access token or ID token through JavaScript. TITAN stores only a hash of the opaque session token.
+
+## Multi-operator approval
+
+A task can now require more than one distinct operator subject.
+
+~~~text
+Task requires 2 approvals
+  ↓
+Operator A → APPROVE → 1 / 2
+  ↓
+Task remains WAITING_APPROVAL
+  ↓
+Operator B → APPROVE → 2 / 2
+  ↓
+Temporal resumes execution
+~~~
+
+The same operator cannot satisfy multiple quorum slots because approval decisions are unique by task + operator subject.
+
+## Not yet implemented
+
+~~~text
+[ ] Delegation to another operator
+[ ] Policy-driven approval escalation
+[ ] Fine-grained project/resource RBAC
+[ ] Refresh-token rotation with upstream provider
+[ ] Temporal query endpoint for approval state
+[ ] Event retention / archival strategy
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN DELEGATION + POLICY ESCALATION + RESOURCE RBAC
+~~~
+
+---
