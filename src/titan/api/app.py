@@ -143,7 +143,6 @@ class TaskResponse(BaseModel):
     required_capabilities: list[str]
     approval_requirement: str
     approval_quorum: int
-    approval_quorum: int
 
     model_config = {"from_attributes": True}
 
