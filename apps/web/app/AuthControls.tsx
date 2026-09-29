@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type OperatorSession = {
   authenticated: boolean;
@@ -21,6 +21,13 @@ export function AuthControls({
   session: OperatorSession | null;
 }) {
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+    void fetch("/api/auth/rotate", { method: "POST" });
+  }, [session]);
 
   if (!session) {
     return (
