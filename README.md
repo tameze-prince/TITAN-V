@@ -8,7 +8,7 @@ The master product and architecture specification lives in `TITAN_Agent.md`.
 
 ## Current phase
 
-**TITAN Identity / OIDC + Production Security**
+**TITAN Session + Multi-Operator Governance**
 
 The durable runtime, governance, recovery, explainability, realtime control plane and governed action foundations are implemented. Approval-gated tasks can pause inside Temporal, collect an operator decision, and resume, reject, or expire deterministically.
 
