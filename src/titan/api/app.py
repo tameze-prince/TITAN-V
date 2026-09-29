@@ -224,6 +224,7 @@ class PlannedTaskResponse(BaseModel):
     risk_level: str
     status: str
     approval_requirement: str
+    approval_quorum: int
 
 
 class TaskGraphResponse(BaseModel):
@@ -749,6 +750,7 @@ async def create_task_graph_plan(
                 risk_level=task.risk_level,
                 status=task.status,
                 approval_requirement=task.approval_requirement,
+                approval_quorum=task.approval_quorum,
             )
         )
 
