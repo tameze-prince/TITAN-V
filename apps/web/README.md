@@ -23,7 +23,7 @@ Override it with `TITAN_API_URL`.
 
 ## Current scope
 
-The MVP is read-oriented and exposes:
+The Command Center now exposes:
 
 - global control-plane metrics;
 - project list;
@@ -34,6 +34,11 @@ The MVP is read-oriented and exposes:
 - recovery metrics;
 - explainability entries;
 - recent events;
-- persisted artifacts.
+- persisted artifacts;
+- governed recovery and task approval controls;
+- live SSE event streaming;
+- OIDC browser sign-in through the Next.js BFF;
+- persistent operator session state;
+- multi-operator approval quorum progress.
 
-Mutating controls, authentication, RBAC and live streaming are intentionally deferred to the next implementation layers.
+The browser does not receive OIDC access or ID tokens. The Next.js BFF forwards the opaque HttpOnly session cookie to TITAN Core.
