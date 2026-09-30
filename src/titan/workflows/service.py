@@ -232,7 +232,7 @@ async def build_workflow_input(
             if task_requires_human_approval(
                 risk_level=tasks_by_id[task_id].risk_level,
                 approval_requirement=tasks_by_id[task_id].approval_requirement,
-                approval_quorum=tasks_by_id[task_id].approval_quorum,
+                approval_quorum=approval_policies[UUID(task_id)].quorum,
             )
         ),
         approval_timeout_seconds=max(1, settings.human_approval_timeout_seconds),
