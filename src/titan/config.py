@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     repair_max_attempts: int = 2
     quality_gate_min_score: float = 1.0
     quality_gate_evaluator_version: str = "1.0"
+    quality_profile_name: str = "default-quality"
+    quality_evaluator_kind: str = "RULE_BASED"
+    quality_evaluator_model: str | None = None
     openai_input_cost_per_1k: float = 0.0
     openai_output_cost_per_1k: float = 0.0
 
