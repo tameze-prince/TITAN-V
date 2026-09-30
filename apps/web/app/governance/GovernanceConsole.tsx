@@ -31,10 +31,12 @@ export function GovernanceConsole({
   initialProfiles,
   initialNotifications,
   session,
+  notificationsScoped,
 }: {
   initialProfiles: EvaluationProfile[];
   initialNotifications: OperatorNotification[];
   session: OperatorSession;
+  notificationsScoped: boolean;
 }) {
   const [profiles, setProfiles] = useState(initialProfiles);
   const [notifications, setNotifications] = useState(initialNotifications);
@@ -370,7 +372,8 @@ export function GovernanceConsole({
               Your role can inspect governance but cannot create policy.
             </p>
           )}
-        </div>
+          </div>
+        )}
       </section>
 
       <section className="card">
@@ -386,7 +389,13 @@ export function GovernanceConsole({
           </span>
         </div>
 
-        <div className="project-list" style={{ marginTop: 16 }}>
+        {!notificationsScoped ? (
+          <p className="muted" style={{ marginTop: 16 }}>
+            Notifications are project-scoped for your current authorization. Open
+            the relevant project in the Command Center to review its alerts.
+          </p>
+        ) : (
+          <div className="project-list" style={{ marginTop: 16 }}>
           {notifications.length === 0 ? (
             <p className="muted">No operator escalation is recorded.</p>
           ) : (
