@@ -95,8 +95,16 @@ class EvaluationEngine:
         )
         min_score = profile.min_score if profile else 1.0
         min_confidence = profile.min_confidence if profile else 0.75
+        explicit_decision = decision or (
+            "PASS" if (
+                not failed_required
+                and score >= min_score
+                and inferred_confidence >= min_confidence
+            ) else "FAIL"
+        )
         passed = (
-            not failed_required
+            explicit_decision == "PASS"
+            and not failed_required
             and score >= min_score
             and inferred_confidence >= min_confidence
         )
