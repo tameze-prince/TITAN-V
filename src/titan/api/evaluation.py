@@ -8,11 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from titan.config import settings
 from titan.persistence.database import get_session
-from titan.persistence.models import (
-    EvaluationCriterionModel,
-    EvaluationProfileModel,
-    OperatorNotificationModel,
-)
+from titan.persistence.models import OperatorNotificationModel
 from titan.runtime.evaluator_profile_store import (
     EvaluationCriterionDefinition,
     EvaluationProfileStore,
