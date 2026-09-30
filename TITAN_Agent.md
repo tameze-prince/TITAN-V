@@ -11114,3 +11114,14 @@ TITAN EVIDENCE + EVALUATION + SELF-REPAIR
 ~~~
 
 ---
+
+## Checkpoint 237 — Evidence + Evaluation + Bounded Self-Repair
+
+- La quality gate indépendante du système est désormais la source d'autorité avant passage d'une tâche à `COMPLETED`.
+- L'évaluation auto-déclarée par l'agent producteur n'est plus utilisée comme preuve de complétude.
+- Les évaluations conservent version de l'évaluateur, agent producteur, indépendance, décision, confiance, score et numéro de réparation.
+- Les preuves sont persistées par critère avec traçabilité vers évaluation, artifact et tâche.
+- Le cycle de self-repair est durable : `RepairPlanned` → `RepairStarted` → `RepairCompleted`, avec terminal borné.
+- Le budget de réparation est configurable via `TITAN_REPAIR_MAX_ATTEMPTS` et vaut 2 par défaut.
+- Le Control Plane expose les métriques qualité, évaluations, preuves et tentatives de réparation.
+- Prochaine extension : profils d'évaluateurs configurables, critères versionnés, évaluateur modèle indépendant et notifications d'escalade.
