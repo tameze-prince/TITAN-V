@@ -108,6 +108,35 @@ class EvaluationProfileStore:
         await session.flush()
         return row
 
+    async def activate(
+        self,
+        session: AsyncSession,
+        *,
+        profile_id: UUID,
+    ) -> EvaluationProfileModel:
+        row = await session.scalar(
+            select(EvaluationProfileModel)
+            .where(EvaluationProfileModel.id == profile_id)
+        )
+        if row is None:
+            raise ValueError("Evaluator profile not found")
+
+        await session.execute(
+            update(EvaluationProfileModel)
+            .where(
+                EvaluationProfileModel.name == row.name,
+                EvaluationProfileModel.scope_type == row.scope_type,
+                EvaluationProfileModel.scope_id == row.scope_id,
+                EvaluationProfileModel.status == "ACTIVE",
+                EvaluationProfileModel.id != row.id,
+            )
+            .values(status="SUPERSEDED")
+        )
+        row.status = "ACTIVE"
+        row.activated_at = datetime.now(UTC)
+        await session.flush()
+        return row
+
     async def list_profiles(
         self,
         session: AsyncSession,
