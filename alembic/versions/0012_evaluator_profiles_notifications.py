@@ -164,8 +164,7 @@ def upgrade() -> None:
         sa.text(
             "UPDATE evaluations SET profile_id = :profile_id, profile_version = 1 "
             "WHERE profile_id IS NULL"
-        ),
-        {"profile_id": default_profile_id},
+        ).bindparams(profile_id=default_profile_id)
     )
 
     op.create_table(
