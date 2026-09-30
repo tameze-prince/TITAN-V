@@ -250,30 +250,30 @@ class TitanWorkflow:
                     raise failures[0]
                 completed_task_ids.extend(wave)
 
-                await workflow.execute_activity(
-                    mark_workflow_completed,
-                    args=(
-                        request.workflow_id,
-                        run_id,
-                        tuple(completed_task_ids),
-                    ),
-                    start_to_close_timeout=timedelta(seconds=30),
-                    retry_policy=RETRY_POLICY,
-                )
+            await workflow.execute_activity(
+                mark_workflow_completed,
+                args=(
+                    request.workflow_id,
+                    run_id,
+                    tuple(completed_task_ids),
+                ),
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=RETRY_POLICY,
+            )
 
-                return WorkflowResult(
-                    workflow_id=request.workflow_id,
-                    status="COMPLETED",
-                    completed_task_ids=tuple(
-                        task_id
-                        for task_id in request.task_ids
-                        if task_id in set(completed_task_ids)
-                    ),
-                    execution_waves=schedule.waves,
-                    estimated_schedule_cost=schedule.estimated_cost,
-                    estimated_makespan_ms=schedule.estimated_makespan_ms,
-                    run_id=run_id,
-                )
+            return WorkflowResult(
+                workflow_id=request.workflow_id,
+                status="COMPLETED",
+                completed_task_ids=tuple(
+                    task_id
+                    for task_id in request.task_ids
+                    if task_id in set(completed_task_ids)
+                ),
+                execution_waves=schedule.waves,
+                estimated_schedule_cost=schedule.estimated_cost,
+                estimated_makespan_ms=schedule.estimated_makespan_ms,
+                run_id=run_id,
+            )
         except Exception as exc:
             await workflow.execute_activity(
                 mark_workflow_failed,
