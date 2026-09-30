@@ -173,6 +173,7 @@ export type ProjectOverview = {
     failed_count: number;
     evidence_count: number;
     repair_attempt_count: number;
+    unread_notification_count: number;
     latest_score: number | null;
     latest_decision: string | null;
   };
