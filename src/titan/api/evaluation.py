@@ -122,7 +122,7 @@ async def list_evaluator_profiles(
         criteria = await store.criteria(session, profile_id=row.id)
         responses.append(
             EvaluationProfileResponse(
-                **EvaluationProfileResponse.model_validate(row).model_dump(),
+                **EvaluationProfileResponse.model_validate(row).model_dump(exclude={"criteria"}),
                 criteria=[EvaluationCriterionResponse.model_validate(item) for item in criteria],
             )
         )
