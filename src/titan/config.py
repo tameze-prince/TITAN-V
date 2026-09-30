@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     operator_session_cookie_samesite: str = "lax"
     oidc_auth_state_ttl_seconds: int = 600
     human_approval_timeout_seconds: int = 86_400
+    resource_rbac_required: bool = False
+    resource_rbac_admin_bypass: bool = True
+    delegation_max_ttl_seconds: int = 86_400
+    policy_escalation_enabled: bool = True
     recovery_max_attempts: int = 2
     recovery_min_autonomy_level: int = 3
     recovery_max_auto_risk_level: str = "R1"
