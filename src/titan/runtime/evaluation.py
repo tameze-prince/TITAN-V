@@ -1,4 +1,12 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class EvaluationJudgeOutput(BaseModel):
+    decision: str = Field(pattern=r"^(PASS|FAIL|NEEDS_REVIEW)$")
+    score: float = Field(ge=0, le=1)
+    confidence: float = Field(ge=0, le=1)
+    criteria: dict[str, bool] = Field(default_factory=dict)
+    findings: dict[str, str] = Field(default_factory=dict)
 
 
 class EvaluationReport(BaseModel):
