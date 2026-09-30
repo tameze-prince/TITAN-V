@@ -688,6 +688,8 @@ async def orchestrate_task(
             )
             await session.commit()
             return True
+        except ApplicationError:
+            raise
         except AgentEvaluationFailure:
             raise
         except Exception as exc:
