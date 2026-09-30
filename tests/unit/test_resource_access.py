@@ -1,49 +1,55 @@
-from datetime import UTC, datetime, timedelta
-from uuid import uuid4
-
 import pytest
 
 from titan.config import settings
-from titan.persistence.models import (
-    OperatorDelegationModel,
-    OperatorResourceGrantModel,
-    OperatorUserModel,
-)
+from titan.persistence.models import OperatorResourceGrantModel
 from titan.runtime.operator_auth import OperatorIdentity
-from titan.runtime.resource_access import has_resource_permission
+from titan.runtime.resource_access import role_at_least
+
+
+def test_role_hierarchy_is_monotonic() -> None:
+    assert role_at_least("admin", "operator")
+    assert role_at_least("operator", "viewer")
+    assert not role_at_least("viewer", "operator")
 
 
 @pytest.mark.asyncio
-async def test_resource_permission_uses_explicit_grant_when_required(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "resource_rbac_required", True)
-    monkeypatch.setattr(settings, "resource_rbac_admin_bypass", False)
-
-    user_id = uuid4()
-    project_id = uuid4()
-
-    class FakeScalar:
-        async def all_grants(self):
-            return [
-                OperatorResourceGrantModel(
-                    user_id=user_id,
-                    resource_type="project",
-                    resource_id=project_id,
-                    permissions=["task:approve"],
-                    status="ACTIVE",
-                    expires_at=datetime.now(UTC) + timedelta(hours=1),
-                )
-            ]
-
-    class FakeSession:
-        async def scalars(self, statement):
-            return FakeScalar()
+async def test_global_permission_requires_resource_mode_to_be_disabled(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "resource_rbac_required", False)
 
     identity = OperatorIdentity(
         subject="operator",
         role="operator",
-        auth_method="session",
-        user_id=user_id,
+        auth_method="static",
     )
 
-    # This is a contract test for the authorization rule; integration tests exercise SQL.
-    assert identity.has_permission("task:approve")
+    from titan.runtime.resource_access import has_resource_permission
+
+    assert await has_resource_permission(
+        None,
+        operator=identity,
+        permission="task:approve",
+        resource_type="project",
+        resource_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resource_mode_fails_closed_without_persistent_user(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "resource_rbac_required", True)
+    monkeypatch.setattr(settings, "resource_rbac_admin_bypass", False)
+
+    identity = OperatorIdentity(
+        subject="operator",
+        role="operator",
+        auth_method="static",
+    )
+
+    from titan.runtime.resource_access import has_resource_permission
+
+    assert not await has_resource_permission(
+        None,
+        operator=identity,
+        permission="task:approve",
+        resource_type="project",
+        resource_id=None,
+    )
