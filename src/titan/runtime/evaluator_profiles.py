@@ -20,6 +20,7 @@ class EvaluationCriterion:
 
 @dataclass(frozen=True, slots=True)
 class EvaluationProfile:
+    id: UUID | None
     name: str
     version: int
     evaluator_kind: str
@@ -30,6 +31,7 @@ class EvaluationProfile:
 
 
 DEFAULT_PROFILE = EvaluationProfile(
+    id=None,
     name="default-quality",
     version=1,
     evaluator_kind="RULE_BASED",
@@ -109,6 +111,7 @@ async def resolve_active_profile(
         )
     )
     return EvaluationProfile(
+        id=row.id,
         name=row.name,
         version=row.version,
         evaluator_kind=row.evaluator_kind,
