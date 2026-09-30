@@ -123,8 +123,34 @@ class EvaluationEngine:
         producer_agent: str,
         provider=None,
         evaluator_model: str | None = None,
+        producer_model: str | None = None,
     ) -> EvaluationResult:
         if profile.evaluator_kind.upper() == "MODEL":
+            resolved_evaluator_model = evaluator_model or profile.evaluator_model
+            if (
+                resolved_evaluator_model
+                and producer_model
+                and resolved_evaluator_model == producer_model
+            ):
+                return self.evaluate(
+                    profile=profile,
+                    checks=(
+                        EvaluationCheck(
+                            name="evaluator_independence",
+                            passed=False,
+                            evidence=(
+                                "The configured evaluator model is identical to the "
+                                "producer model; evaluation is not considered independent."
+                            ),
+                            required=True,
+                        ),
+                    ),
+                    evaluator_type="MODEL_EVALUATOR_NOT_INDEPENDENT",
+                    independent=False,
+                    evaluator_version=str(profile.version),
+                    confidence=0.0,
+                    decision="NEEDS_REVIEW",
+                )
             if provider is None:
                 return self.evaluate(
                     profile=profile,
@@ -171,7 +197,7 @@ class EvaluationEngine:
                     ModelRequest(
                         system_prompt=judge_system,
                         user_prompt=judge_prompt,
-                        model=evaluator_model or profile.evaluator_model or "local",
+                        model=resolved_evaluator_model or "local",
                         metadata={
                             "objective": task_objective,
                             "producer_agent": producer_agent,
