@@ -6,6 +6,9 @@ class EvaluationReport(BaseModel):
     score: float
     checks: dict[str, bool]
     message: str
+    evaluator_type: str = "SYSTEM_QUALITY_GATE"
+    independent: bool = True
+    confidence: float = 1.0
 
 
 def evaluate_execution(
@@ -16,15 +19,26 @@ def evaluate_execution(
     checks = {
         "structured_output": isinstance(output, BaseModel),
         "summary_present": bool(getattr(output, "summary", "").strip()),
+        "result_present": bool(getattr(output, "result", {})),
         "artifact_present": bool(artifact_markdown.strip()),
     }
     passed = all(checks.values())
-    score = 1.0 if passed else sum(checks.values()) / len(checks)
+    failed_count = sum(1 for value in checks.values() if not value)
+    score = sum(checks.values()) / len(checks)
+    confidence = max(
+        0.0,
+        min(1.0, 0.80 + (0.20 / len(checks)) - (0.08 * failed_count)),
+    )
     return EvaluationReport(
         passed=passed,
         score=score,
         checks=checks,
-        message="Execution passed the baseline runtime quality gate"
-        if passed
-        else "Execution failed one or more baseline runtime quality checks",
+        message=(
+            "Independent system quality gate passed"
+            if passed
+            else "Independent system quality gate failed one or more checks"
+        ),
+        evaluator_type="SYSTEM_QUALITY_GATE",
+        independent=True,
+        confidence=confidence,
     )
