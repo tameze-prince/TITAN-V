@@ -136,4 +136,44 @@ export type ProjectOverview = {
     objective: string;
     created_at: string;
   } | null;
+  evaluations: Array<{
+    id: string;
+    task_id: string | null;
+    run_id: string | null;
+    artifact_id: string | null;
+    evaluator_type: string;
+    evaluator_version: string;
+    producer_agent: string | null;
+    independent: boolean;
+    decision: string;
+    status: string;
+    score: number | null;
+    confidence: number;
+    repair_attempt: number;
+    criteria: Record<string, boolean>;
+    created_at: string;
+    completed_at: string | null;
+  }>;
+  repair_attempts: Array<{
+    id: string;
+    evaluation_id: string;
+    task_id: string | null;
+    attempt: number;
+    max_attempts: number;
+    diagnosis: string;
+    corrective_action: string;
+    status: string;
+    created_at: string;
+    started_at: string | null;
+    completed_at: string | null;
+  }>;
+  quality: {
+    evaluation_count: number;
+    passed_count: number;
+    failed_count: number;
+    evidence_count: number;
+    repair_attempt_count: number;
+    latest_score: number | null;
+    latest_decision: string | null;
+  };
 };
