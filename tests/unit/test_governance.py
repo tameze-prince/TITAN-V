@@ -142,3 +142,20 @@ def test_risk_aware_task_approval_gate() -> None:
         risk_level="R2",
         approval_requirement="NONE",
     )
+
+
+def test_policy_definition_supports_task_approval_escalation() -> None:
+    from titan.runtime.policy_store import PolicyDefinition
+
+    policy = PolicyDefinition(
+        task_approval_quorum=2,
+        task_approval_min_role="operator",
+        task_approval_escalation_role="admin",
+        task_approval_escalation_enabled=True,
+        delegation_allowed=True,
+        delegation_max_ttl_seconds=3_600,
+    )
+
+    assert policy.task_approval_quorum == 2
+    assert policy.task_approval_escalation_role == "admin"
+    assert policy.delegation_allowed is True
