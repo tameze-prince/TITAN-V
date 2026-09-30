@@ -143,7 +143,7 @@ class AgentRuntime:
         self.tool_executor = ToolExecutor(self.tools, policy=self.policy)
         self.workspace_manager = WorkspaceManager(settings.workspace_root)
         self.tool_loop = AgentToolLoop()
-        self.repair_policy = RepairPolicy()
+        self.repair_policy = RepairPolicy(max_attempts=settings.repair_max_attempts)
         self.repair_planner = RepairPlanner()
 
     async def execute_tool(
