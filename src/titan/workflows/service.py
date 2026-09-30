@@ -236,6 +236,7 @@ async def build_workflow_input(
             )
         ),
         approval_timeout_seconds=max(1, settings.human_approval_timeout_seconds),
+        repair_max_attempts=max(1, settings.repair_max_attempts),
         recovery_attempt=recovery_attempt,
         recovery_root_workflow_id=recovery_root_workflow_id,
     )
