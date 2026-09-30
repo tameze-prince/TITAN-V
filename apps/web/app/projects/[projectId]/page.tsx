@@ -109,6 +109,56 @@ export default async function ProjectPage({
           </div>
         </section>
 
+        <section className="detail-grid">
+          <div className="card">
+            <h2>Quality gate</h2>
+            <div className="stack">
+              <div className="row">
+                <span className="label">Evaluations</span>
+                <strong>{project.quality.evaluation_count}</strong>
+              </div>
+              <div className="row">
+                <span className="label">Passed</span>
+                <strong>{project.quality.passed_count}</strong>
+              </div>
+              <div className="row">
+                <span className="label">Failed</span>
+                <strong>{project.quality.failed_count}</strong>
+              </div>
+              <div className="row">
+                <span className="label">Evidence</span>
+                <strong>{project.quality.evidence_count}</strong>
+              </div>
+              <div className="row">
+                <span className="label">Latest score</span>
+                <strong>
+                  {project.quality.latest_score === null
+                    ? "—"
+                    : (project.quality.latest_score * 100).toFixed(0) + "%"}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Self-repair</h2>
+            <div className="stack">
+              <div className="row">
+                <span className="label">Repair attempts</span>
+                <strong>{project.quality.repair_attempt_count}</strong>
+              </div>
+              <div className="row">
+                <span className="label">Latest decision</span>
+                <strong>{project.quality.latest_decision ?? "—"}</strong>
+              </div>
+              <div className="row">
+                <span className="label">Latest evaluator</span>
+                <strong>{project.evaluations[0]?.evaluator_type ?? "—"}</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <RecoveryControls
           projectId={projectId}
           actions={project.recovery_actions}
@@ -152,6 +202,61 @@ export default async function ProjectPage({
               </div>
             ) : (
               <p className="muted">No task graph has been persisted yet.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="layout">
+          <div className="card">
+            <h2>Recent evaluations</h2>
+            {project.evaluations.length === 0 ? (
+              <p className="muted">No evaluations recorded.</p>
+            ) : (
+              <div className="stack">
+                {project.evaluations.slice(0, 10).map((evaluation) => (
+                  <div className="event" key={evaluation.id}>
+                    <div className="row">
+                      <strong>{evaluation.decision}</strong>
+                      <span className="badge">
+                        {evaluation.score === null
+                          ? "—"
+                          : (evaluation.score * 100).toFixed(0) + "%"}
+                      </span>
+                    </div>
+                    <div className="muted">
+                      {evaluation.evaluator_type} ·{" "}
+                      {evaluation.independent ? "independent" : "producer"} ·{" "}
+                      repair {evaluation.repair_attempt}
+                    </div>
+                    <div className="muted">
+                      {Object.entries(evaluation.criteria)
+                        .map(([name, passed]) => name + ":" + (passed ? "pass" : "fail"))
+                        .join(" · ")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <h2>Repair loop</h2>
+            {project.repair_attempts.length === 0 ? (
+              <p className="muted">No repair attempts recorded.</p>
+            ) : (
+              <div className="stack">
+                {project.repair_attempts.slice(0, 10).map((repair) => (
+                  <div className="event" key={repair.id}>
+                    <div className="row">
+                      <strong>
+                        attempt {repair.attempt}/{repair.max_attempts}
+                      </strong>
+                      <span className="badge">{repair.status}</span>
+                    </div>
+                    <div style={{ marginTop: 6 }}>{repair.diagnosis}</div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </section>
