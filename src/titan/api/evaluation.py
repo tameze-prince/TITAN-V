@@ -173,6 +173,32 @@ async def create_evaluator_profile(
     )
 
 
+@router.post(
+    "/evaluator-profiles/{profile_id}/activate",
+    response_model=EvaluationProfileResponse,
+)
+async def activate_evaluator_profile(
+    profile_id: UUID,
+    session: AsyncSession = Depends(get_session),
+    operator: OperatorIdentity = Depends(require_operator),
+) -> EvaluationProfileResponse:
+    operator.require_permission("policy:admin")
+    try:
+        row = await EvaluationProfileStore().activate(
+            session,
+            profile_id=profile_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    await session.commit()
+    criteria = await EvaluationProfileStore().criteria(session, profile_id=row.id)
+    return EvaluationProfileResponse(
+        **EvaluationProfileResponse.model_validate(row).model_dump(exclude={"criteria"}),
+        criteria=[EvaluationCriterionResponse.model_validate(item) for item in criteria],
+    )
+
+
 @router.get(
     "/notifications",
     response_model=list[OperatorNotificationResponse],
