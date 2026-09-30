@@ -137,6 +137,10 @@ export default async function ProjectPage({
                     : (project.quality.latest_score * 100).toFixed(0) + "%"}
                 </strong>
               </div>
+              <div className="row">
+                <span className="label">Unread alerts</span>
+                <strong>{project.quality.unread_notification_count}</strong>
+              </div>
             </div>
           </div>
 
