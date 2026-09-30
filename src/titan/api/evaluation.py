@@ -107,11 +107,29 @@ async def list_evaluator_profiles(
     operator: OperatorIdentity = Depends(require_operator),
 ) -> list[EvaluationProfileResponse]:
     operator.require_permission("control_plane:read")
+    effective_scope_type = scope_type
+    if settings.resource_rbac_required and operator.role != "admin":
+        if scope_type == "PROJECT":
+            if scope_id is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Project evaluator profile listing requires scope_id under resource RBAC",
+                )
+            await require_resource_permission(
+                session,
+                operator=operator,
+                permission="control_plane:read",
+                resource_type="project",
+                resource_id=scope_id,
+            )
+        elif scope_type is None:
+            effective_scope_type = "GLOBAL"
+
     store = EvaluationProfileStore()
     rows = await store.list_profiles(
         session,
         name=name,
-        scope_type=scope_type,
+        scope_type=effective_scope_type,
         scope_id=scope_id,
     )
     responses = []
