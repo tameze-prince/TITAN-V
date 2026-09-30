@@ -178,3 +178,47 @@ export type ProjectOverview = {
     latest_decision: string | null;
   };
 };
+
+
+export type EvaluationCriterion = {
+  id: string;
+  profile_id: string;
+  key: string;
+  description: string;
+  kind: string;
+  weight: number;
+  required: boolean;
+  position: number;
+  status: string;
+};
+
+export type EvaluationProfile = {
+  id: string;
+  name: string;
+  scope_type: string;
+  scope_id: string | null;
+  version: number;
+  status: string;
+  evaluator_kind: string;
+  evaluator_model: string | null;
+  min_score: number;
+  min_confidence: number;
+  created_by: string;
+  activated_at: string | null;
+  criteria: EvaluationCriterion[];
+};
+
+export type OperatorNotification = {
+  id: string;
+  project_id: string;
+  evaluation_id: string | null;
+  task_id: string | null;
+  severity: string;
+  notification_type: string;
+  title: string;
+  body: string;
+  status: string;
+  created_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+};
