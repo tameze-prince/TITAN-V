@@ -668,6 +668,70 @@ class EvidenceModel(Base):
     )
 
 
+class EvaluationProfileModel(Base):
+    __tablename__ = "evaluation_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "name",
+            "scope_type",
+            "scope_id",
+            "version",
+            name="uq_evaluation_profiles_name_scope_version",
+        ),
+        CheckConstraint(
+            "min_score >= 0 AND min_score <= 1",
+            name="evaluation_profile_min_score_range",
+        ),
+        CheckConstraint(
+            "min_confidence >= 0 AND min_confidence <= 1",
+            name="evaluation_profile_min_confidence_range",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    scope_type: Mapped[str] = mapped_column(String(32), nullable=False, default="GLOBAL", server_default="GLOBAL")
+    scope_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="DRAFT", server_default="DRAFT")
+    evaluator_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="RULE_BASED", server_default="RULE_BASED")
+    evaluator_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    min_score: Mapped[float] = mapped_column(Float, nullable=False, default=1.0, server_default="1.0")
+    min_confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.75, server_default="0.75")
+    system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False, default="SYSTEM", server_default="SYSTEM")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class EvaluationCriterionModel(Base):
+    __tablename__ = "evaluation_criteria"
+    __table_args__ = (
+        UniqueConstraint(
+            "profile_id",
+            "key",
+            name="uq_evaluation_criteria_profile_key",
+        ),
+        CheckConstraint(
+            "weight > 0",
+            name="evaluation_criterion_weight_positive",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("evaluation_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    key: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="PRESENCE", server_default="PRESENCE")
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0, server_default="1.0")
+    required: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE", server_default="ACTIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class EvaluationModel(Base):
     __tablename__ = "evaluations"
     __table_args__ = (
@@ -697,6 +761,12 @@ class EvaluationModel(Base):
     )
     artifact_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("artifacts.id", ondelete="SET NULL"), nullable=True
+    )
+    profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("evaluation_profiles.id", ondelete="SET NULL"), nullable=True
+    )
+    profile_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
     )
     evaluator_type: Mapped[str] = mapped_column(String(64), nullable=False)
     evaluator_version: Mapped[str] = mapped_column(
@@ -729,6 +799,29 @@ class EvaluationModel(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OperatorNotificationModel(Base):
+    __tablename__ = "operator_notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    evaluation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("evaluations.id", ondelete="SET NULL"), nullable=True
+    )
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
+    )
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, default="WARNING", server_default="WARNING")
+    notification_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="UNREAD", server_default="UNREAD")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acknowledged_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class RepairAttemptModel(Base):
