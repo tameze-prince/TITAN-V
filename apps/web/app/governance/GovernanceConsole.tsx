@@ -52,12 +52,14 @@ export function GovernanceConsole({
   async function activate(profile: EvaluationProfile) {
     setBusy(profile.id);
     setMessage(null);
+
     try {
       const response = await fetch(
         "/api/titan/evaluator-profiles/" + profile.id + "/activate",
         { method: "POST" },
       );
       const payload = await response.json();
+
       if (!response.ok) {
         throw new Error(payload.detail ?? "Activation failed.");
       }
@@ -85,12 +87,14 @@ export function GovernanceConsole({
   async function acknowledge(notificationId: string) {
     setBusy(notificationId);
     setMessage(null);
+
     try {
       const response = await fetch(
         "/api/titan/notifications/" + notificationId + "/acknowledge",
         { method: "POST" },
       );
       const payload = await response.json();
+
       if (!response.ok) {
         throw new Error(payload.detail ?? "Acknowledgement failed.");
       }
@@ -157,6 +161,7 @@ export function GovernanceConsole({
         }),
       });
       const payload = await response.json();
+
       if (!response.ok) {
         throw new Error(payload.detail ?? "Profile creation failed.");
       }
@@ -173,6 +178,7 @@ export function GovernanceConsole({
             ]
           : [payload, ...current],
       );
+
       event.currentTarget.reset();
       setMessage("Created " + payload.name + " v" + payload.version + ".");
     } catch (error) {
@@ -192,7 +198,8 @@ export function GovernanceConsole({
             <div>
               <h2>Evaluator profiles</h2>
               <p className="muted" style={{ marginTop: 6 }}>
-                {profiles.length} versions · {canAdmin ? "admin controls enabled" : "read only"}
+                {profiles.length} versions ·{" "}
+                {canAdmin ? "admin controls enabled" : "read only"}
               </p>
             </div>
             <span className="badge">
@@ -210,6 +217,7 @@ export function GovernanceConsole({
                     <div className="project-title">
                       {profile.name} · v{profile.version}
                     </div>
+
                     <div className="project-meta">
                       <span
                         className={
@@ -232,6 +240,7 @@ export function GovernanceConsole({
                         confidence ≥ {(profile.min_confidence * 100).toFixed(0)}%
                       </span>
                     </div>
+
                     {profile.evaluator_model ? (
                       <p className="muted" style={{ marginTop: 8 }}>
                         judge model: {profile.evaluator_model}
@@ -372,8 +381,7 @@ export function GovernanceConsole({
               Your role can inspect governance but cannot create policy.
             </p>
           )}
-          </div>
-        )}
+        </div>
       </section>
 
       <section className="card">
@@ -384,6 +392,7 @@ export function GovernanceConsole({
               Alerts requiring human review stay persisted until acknowledged.
             </p>
           </div>
+
           <span className={"badge " + (unreadCount ? "warning" : "success")}>
             {unreadCount} unread
           </span>
@@ -391,19 +400,21 @@ export function GovernanceConsole({
 
         {!notificationsScoped ? (
           <p className="muted" style={{ marginTop: 16 }}>
-            Notifications are project-scoped for your current authorization. Open
-            the relevant project in the Command Center to review its alerts.
+            Notifications are project-scoped for your current authorization.
+            Open the relevant project in the Command Center to review its alerts.
+          </p>
+        ) : notifications.length === 0 ? (
+          <p className="muted" style={{ marginTop: 16 }}>
+            No operator escalation is recorded.
           </p>
         ) : (
           <div className="project-list" style={{ marginTop: 16 }}>
-          {notifications.length === 0 ? (
-            <p className="muted">No operator escalation is recorded.</p>
-          ) : (
-            notifications.map((notification) => (
+            {notifications.map((notification) => (
               <article className="action-card" key={notification.id}>
                 <div className="row">
                   <div>
                     <strong>{notification.title}</strong>
+
                     <div className="project-meta">
                       <span
                         className={
@@ -438,9 +449,9 @@ export function GovernanceConsole({
                   {new Date(notification.created_at).toLocaleString()}
                 </p>
               </article>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {message ? <p className="muted">{message}</p> : null}
