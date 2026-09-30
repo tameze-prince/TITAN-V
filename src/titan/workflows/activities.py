@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from titan.config import settings
 from titan.persistence.database import SessionFactory
@@ -414,13 +415,10 @@ async def orchestrate_task(
                     )
                 )
                 await session.commit()
-                raise AgentEvaluationFailure(
-                    evaluation=evaluation_result.to_report(),
-                    plan=repair_planner.build(
-                        evaluation=evaluation_result.to_report(),
-                        attempt=max(1, current_attempt),
-                        prior_context=repair_inputs,
-                    ),
+                raise ApplicationError(
+                    "Independent evaluation requires operator review",
+                    type="QUALITY_REVIEW_REQUIRED",
+                    non_retryable=True,
                 )
 
             if failed_quality_gate:
