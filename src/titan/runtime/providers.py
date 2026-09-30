@@ -116,8 +116,13 @@ class OpenAIResponsesProvider(ModelProvider):
         request: ModelRequest,
         output_model: type[BaseModel],
     ) -> ModelResponse:
+        requested_model = (
+            request.model.split(":", 1)[1]
+            if request.model.startswith("openai:")
+            else self._model
+        )
         response = await self._client.responses.parse(
-            model=self._model,
+            model=requested_model,
             input=[
                 {"role": "system", "content": request.system_prompt},
                 {"role": "user", "content": request.user_prompt},
