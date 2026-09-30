@@ -11125,3 +11125,16 @@ TITAN EVIDENCE + EVALUATION + SELF-REPAIR
 - Le budget de réparation est configurable via `TITAN_REPAIR_MAX_ATTEMPTS` et vaut 2 par défaut.
 - Le Control Plane expose les métriques qualité, évaluations, preuves et tentatives de réparation.
 - Prochaine extension : profils d'évaluateurs configurables, critères versionnés, évaluateur modèle indépendant et notifications d'escalade.
+
+## Checkpoint 238 — Versioned Evaluator Profiles + Human Escalation
+
+- Les profils d'évaluation sont maintenant versionnés et scoppés globalement ou par projet.
+- Chaque profil contient un type d'évaluateur, un modèle optionnel, des seuils de score/confiance et une liste de critères persistants.
+- Les critères sont versionnés avec le profil et leur poids/obligation sont conservés dans chaque évaluation.
+- Le runtime supporte un évaluateur règle-based indépendant et un évaluateur modèle structuré.
+- Le juge modèle échoue fermé si son provider est indisponible ou si le modèle juge est identique au modèle producteur.
+- Une évaluation `NEEDS_REVIEW` n'est pas rejouée inutilement par Temporal.
+- L'épuisement du budget de self-repair crée une notification opérateur persistante et exige une revue humaine.
+- Le Control Plane expose le nombre d'alertes non acquittées; une API permet de lister et acquitter les notifications.
+- Une API admin permet de créer des versions de profils et de les activer.
+- Prochaine extension : administration UI complète des profils/critères, notifications externes, et métriques comparatives des évaluateurs.
