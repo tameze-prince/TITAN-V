@@ -100,7 +100,7 @@ class TitanWorkflow:
             maximum_attempts=max(1, request.repair_max_attempts + 1),
         )
 
-    for wave in schedule.waves:
+        for wave in schedule.waves:
             gated_tasks: list[str] = []
 
             for task_id in wave:
