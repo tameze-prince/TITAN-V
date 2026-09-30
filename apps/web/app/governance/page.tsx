@@ -10,13 +10,20 @@ import { GovernanceConsole } from "./GovernanceConsole";
 
 export default async function GovernancePage() {
   try {
-    const [profiles, notifications, session] = await Promise.all([
-      titanFetch<EvaluationProfile[]>("/api/v1/control-plane/evaluator-profiles"),
-      titanFetch<OperatorNotification[]>(
+    const session = await titanFetch<OperatorSession>("/api/v1/auth/session");
+    const profiles = await titanFetch<EvaluationProfile[]>(
+      "/api/v1/control-plane/evaluator-profiles",
+    );
+
+    let notifications: OperatorNotification[] = [];
+    let notificationsScoped = true;
+    try {
+      notifications = await titanFetch<OperatorNotification[]>(
         "/api/v1/control-plane/notifications?limit=100",
-      ),
-      titanFetch<OperatorSession>("/api/v1/auth/session"),
-    ]);
+      );
+    } catch {
+      notificationsScoped = false;
+    }
 
     return (
       <main className="shell">
@@ -40,6 +47,7 @@ export default async function GovernancePage() {
           initialProfiles={profiles}
           initialNotifications={notifications}
           session={session}
+          notificationsScoped={notificationsScoped}
         />
       </main>
     );
