@@ -1404,6 +1404,28 @@ async def decide_task_approval(
                     payload=escalation_payload,
                 )
             )
+            session.add(
+                GovernanceDecisionModel(
+                    project_id=project_id,
+                    workflow_id=workflow.id,
+                    task_id=task.id,
+                    domain="TASK_APPROVAL",
+                    action="ESCALATE",
+                    allowed=False,
+                    requires_human=True,
+                    reason=(
+                        f"Approval requires role '{approval_policy.minimum_role}'"
+                    ),
+                    checks_json=[
+                        {
+                            "policy": "task-approval-role",
+                            "required_role": approval_policy.minimum_role,
+                            "escalation_role": approval_policy.escalation_role,
+                        }
+                    ],
+                    context_json=escalation_payload,
+                )
+            )
             await session.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -1413,10 +1435,7 @@ async def decide_task_approval(
             ),
         )
 
-    if payload.approved:
-        effective_quorum = approval_policy.quorum
-    else:
-        effective_quorum = approval_policy.quorum
+    effective_quorum = approval_policy.quorum
 
     reason = payload.reason or (
         "Task approved by operator"
