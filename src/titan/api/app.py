@@ -1313,6 +1313,14 @@ async def decide_task_approval(
 ) -> TaskApprovalResponse:
     operator.require_permission("task:approve")
 
+    await require_resource_permission(
+        session,
+        operator=operator,
+        permission="task:approve",
+        resource_type="project",
+        resource_id=project_id,
+    )
+
     task = await session.scalar(
         select(TaskModel)
         .where(
@@ -1365,6 +1373,47 @@ async def decide_task_approval(
             detail="This operator has already recorded the opposite decision",
         )
 
+    approval_policy = await resolve_task_approval_policy(
+        session,
+        project_id=project_id,
+        task=task,
+    )
+
+    if not role_at_least(operator.role, approval_policy.minimum_role):
+        escalation_payload = {
+            "operator_subject": operator.subject,
+            "operator_role": operator.role,
+            "required_role": approval_policy.minimum_role,
+            "escalation_role": approval_policy.escalation_role,
+            "escalation_enabled": approval_policy.escalation_enabled,
+            "task_id": str(task.id),
+        }
+        if approval_policy.escalation_enabled:
+            session.add(
+                EventModel(
+                    project_id=project_id,
+                    type="TaskApprovalEscalated",
+                    actor_type="OPERATOR",
+                    actor_subject=operator.subject,
+                    aggregate_type="TASK",
+                    aggregate_id=task.id,
+                    payload=escalation_payload,
+                )
+            )
+            await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Task approval requires role '{approval_policy.minimum_role}'. "
+                f"Escalation target: '{approval_policy.escalation_role}'."
+            ),
+        )
+
+    if payload.approved:
+        effective_quorum = approval_policy.quorum
+    else:
+        effective_quorum = approval_policy.quorum
+
     reason = payload.reason or (
         "Task approved by operator"
         if payload.approved
@@ -1397,7 +1446,7 @@ async def decide_task_approval(
     )
 
     if payload.approved:
-        final_approval = approved_count >= max(1, task.approval_quorum)
+        final_approval = approved_count >= effective_quorum
         if final_approval:
             task.status = "APPROVED"
         event_type = "TaskApprovalGranted" if final_approval else "TaskApprovalRecorded"
@@ -1422,7 +1471,7 @@ async def decide_task_approval(
                 "operator_auth_method": operator.auth_method,
                 "operator_issuer": operator.issuer,
                 "reason": reason,
-                "approval_quorum": task.approval_quorum,
+                "approval_quorum": effective_quorum,
                 "approval_count": approved_count,
             },
         )
@@ -1513,7 +1562,7 @@ async def decide_task_approval(
         ),
         reason=reason,
         status=task.status,
-        approval_quorum=task.approval_quorum,
+        approval_quorum=effective_quorum,
         approval_count=approved_count,
     )
 
