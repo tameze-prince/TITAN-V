@@ -96,7 +96,12 @@ class TitanWorkflow:
         approval_quorums = dict(request.approval_quorums)
 
         try:
-            for wave in schedule.waves:
+            repair_retry_policy = RetryPolicy(
+            initial_interval=timedelta(seconds=1),
+            maximum_attempts=max(1, request.repair_max_attempts + 1),
+        )
+
+        for wave in schedule.waves:
                 gated_tasks: list[str] = []
 
                 for task_id in wave:
@@ -230,7 +235,7 @@ class TitanWorkflow:
                             orchestrate_task,
                             args=(request.workflow_id, task_id, run_id),
                             start_to_close_timeout=timedelta(seconds=60),
-                            retry_policy=RETRY_POLICY,
+                            retry_policy=repair_retry_policy,
                         )
                         for task_id in gated_tasks
                     ),
