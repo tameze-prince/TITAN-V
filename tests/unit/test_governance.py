@@ -1,3 +1,6 @@
+
+import pytest
+
 from titan.runtime.governance import GovernanceAction, GovernanceEngine
 from titan.runtime.model_router import ModelBudget, ModelRoute, ModelSelection
 from titan.runtime.policies import PolicyDecision
@@ -158,4 +161,50 @@ def test_policy_definition_supports_task_approval_escalation() -> None:
 
     assert policy.task_approval_quorum == 2
     assert policy.task_approval_escalation_role == "admin"
+    assert policy.delegation_allowed is True
+
+
+@pytest.mark.asyncio
+async def test_task_approval_policy_escalates_role_after_wait(monkeypatch) -> None:
+    from datetime import UTC, datetime, timedelta
+    from uuid import uuid4
+
+    from titan.runtime.approval_policy import resolve_task_approval_policy
+    from titan.runtime.policy_store import PolicyVersionStore
+
+    task = type(
+        "Task",
+        (),
+        {
+            "approval_quorum": 1,
+            "updated_at": datetime.now(UTC) - timedelta(seconds=120),
+        },
+    )()
+
+    class FakePolicy:
+        definition_json = {
+            "task_approval_quorum": 2,
+            "task_approval_min_role": "operator",
+            "task_approval_escalation_role": "admin",
+            "task_approval_escalation_enabled": True,
+            "task_approval_escalation_after_seconds": 60,
+            "delegation_allowed": True,
+            "delegation_max_ttl_seconds": 3600,
+        }
+
+    async def fake_resolve(self, session, *, policy_name, project_id=None, agent_id=None):
+        assert policy_name == "task_approval"
+        assert project_id is not None
+        return FakePolicy()
+
+    monkeypatch.setattr(PolicyVersionStore, "resolve_effective", fake_resolve)
+
+    policy = await resolve_task_approval_policy(
+        None,
+        project_id=uuid4(),
+        task=task,
+    )
+
+    assert policy.quorum == 2
+    assert policy.minimum_role == "admin"
     assert policy.delegation_allowed is True
