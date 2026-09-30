@@ -11138,3 +11138,11 @@ TITAN EVIDENCE + EVALUATION + SELF-REPAIR
 - Le Control Plane expose le nombre d'alertes non acquittées; une API permet de lister et acquitter les notifications.
 - Une API admin permet de créer des versions de profils et de les activer.
 - Prochaine extension : administration UI complète des profils/critères, notifications externes, et métriques comparatives des évaluateurs.
+## Checkpoint 239 — Governance Command Center
+
+- `/governance` provides a human operator surface for evaluator profile lifecycle and escalation notifications.
+- Administrators can create immutable profile versions and explicitly activate a version.
+- Profile visibility respects resource-RBAC scope; non-admin operators do not receive unscoped project-specific profiles.
+- Operator notifications can be listed and acknowledged only with authenticated project access.
+- The UI preserves the backend as the authorization source of truth; Next.js BFF routes never expose operator secrets to browser JavaScript.
+- Temporal execution retry capacity now follows the configured repair budget passed through WorkflowInput.
