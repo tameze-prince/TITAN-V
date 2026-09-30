@@ -279,7 +279,9 @@ class ReplanResponse(BaseModel):
 async def create_policy_version(
     payload: PolicyCreateRequest,
     session: AsyncSession = Depends(get_session),
+    operator: OperatorIdentity = Depends(require_operator),
 ) -> PolicyVersionModel:
+    operator.require_permission("policy:admin")
     store = PolicyVersionStore()
     try:
         row = await store.create(
@@ -328,7 +330,9 @@ async def list_policy_versions(
     scope_type: str | None = None,
     scope_id: UUID | None = None,
     session: AsyncSession = Depends(get_session),
+    operator: OperatorIdentity = Depends(require_operator),
 ) -> list[PolicyVersionModel]:
+    operator.require_permission("control_plane:read")
     return await PolicyVersionStore().list_versions(
         session,
         policy_name=policy_name,
