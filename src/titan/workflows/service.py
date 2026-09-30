@@ -12,6 +12,7 @@ from titan.persistence.models import (
     WorkflowModel,
     task_dependencies,
 )
+from titan.runtime.approval_policy import resolve_task_approval_policy
 from titan.runtime.governance import task_requires_human_approval
 from titan.runtime.model_router import BudgetExceeded, ModelBudget, ModelSelectionRequest
 from titan.runtime.scheduler import DependencyAwareScheduler, TaskSchedulingProfile
@@ -33,6 +34,14 @@ async def build_workflow_input(
     requested_ids = tuple(str(task.id) for task in tasks)
     requested_id_set = set(requested_ids)
     tasks_by_id = {str(task.id): task for task in tasks}
+    approval_policies = {
+        task.id: await resolve_task_approval_policy(
+            session,
+            project_id=project.id,
+            task=task,
+        )
+        for task in tasks
+    }
 
     dependency_rows = list(
         await session.execute(
@@ -211,13 +220,13 @@ async def build_workflow_input(
             if task_requires_human_approval(
                 risk_level=tasks_by_id[task_id].risk_level,
                 approval_requirement=tasks_by_id[task_id].approval_requirement,
-                approval_quorum=tasks_by_id[task_id].approval_quorum,
+                approval_quorum=approval_policies[UUID(task_id)].quorum,
             )
         ),
         approval_quorums=tuple(
             (
                 task_id,
-                max(1, tasks_by_id[task_id].approval_quorum),
+                approval_policies[UUID(task_id)].quorum,
             )
             for task_id in requested_ids
             if task_requires_human_approval(
