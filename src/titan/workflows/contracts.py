@@ -26,6 +26,7 @@ class WorkflowInput:
     approval_task_ids: tuple[str, ...] = field(default_factory=tuple)
     approval_quorums: tuple[tuple[str, int], ...] = field(default_factory=tuple)
     approval_timeout_seconds: int = 86_400
+    repair_max_attempts: int = 2
     recovery_attempt: int = 0
     recovery_root_workflow_id: str | None = None
 
