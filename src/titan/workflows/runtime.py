@@ -97,11 +97,11 @@ class TitanWorkflow:
 
         try:
             repair_retry_policy = RetryPolicy(
-            initial_interval=timedelta(seconds=1),
-            maximum_attempts=max(1, request.repair_max_attempts + 1),
-        )
+                initial_interval=timedelta(seconds=1),
+                maximum_attempts=max(1, request.repair_max_attempts + 1),
+            )
 
-        for wave in schedule.waves:
+            for wave in schedule.waves:
                 gated_tasks: list[str] = []
 
                 for task_id in wave:
