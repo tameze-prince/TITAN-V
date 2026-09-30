@@ -1902,7 +1902,7 @@ async def create_and_start_workflow(
             if task_requires_human_approval(
                 risk_level=task.risk_level,
                 approval_requirement=task.approval_requirement,
-                approval_quorum=task.approval_quorum,
+                approval_quorum=approval_policies[str(task.id)].quorum,
             )
         ),
         approval_timeout_seconds=max(1, settings.human_approval_timeout_seconds),
