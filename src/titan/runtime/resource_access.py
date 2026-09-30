@@ -41,7 +41,7 @@ async def has_resource_permission(
         return True
 
     if operator.user_id is None:
-        return operator.has_permission(permission)
+        return False
 
     now = datetime.now(UTC)
 
