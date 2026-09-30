@@ -314,3 +314,67 @@ code {
   border-color: rgba(255, 107, 122, 0.35);
   color: var(--danger);
 }
+
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 11px;
+  color: var(--text);
+  background: var(--panel-2);
+  font: inherit;
+  outline: none;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: #3b4d67;
+  box-shadow: 0 0 0 3px rgba(120, 169, 255, 0.08);
+}
+
+.field textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.checkbox input {
+  width: 16px;
+  height: 16px;
+}
+
+.badge.danger {
+  color: var(--danger);
+}
+
+.governance-console {
+  gap: 16px;
+}
+
+@media (max-width: 760px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
