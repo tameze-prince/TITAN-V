@@ -758,7 +758,7 @@ async def create_task_graph_plan(
                 risk_level=task.risk_level,
                 status=task.status,
                 approval_requirement=task.approval_requirement,
-                approval_quorum=task.approval_quorum,
+                approval_quorum=approval_policies[str(task.id)].quorum,
             )
         )
 
@@ -1676,6 +1676,14 @@ async def create_and_start_workflow(
     await session.commit()
 
     requested_ids = tuple(str(task.id) for task in tasks)
+    approval_policies = {
+        str(task.id): await resolve_task_approval_policy(
+            session,
+            project_id=project_id,
+            task=task,
+        )
+        for task in tasks
+    }
     dependency_rows = list(
         await session.execute(
             select(
@@ -1885,11 +1893,11 @@ async def create_and_start_workflow(
             if task_requires_human_approval(
                 risk_level=task.risk_level,
                 approval_requirement=task.approval_requirement,
-                approval_quorum=task.approval_quorum,
+                approval_quorum=approval_policies[str(task.id)].quorum,
             )
         ),
         approval_quorums=tuple(
-            (str(task.id), max(1, task.approval_quorum))
+            (str(task.id), approval_policies[str(task.id)].quorum)
             for task in tasks
             if task_requires_human_approval(
                 risk_level=task.risk_level,
