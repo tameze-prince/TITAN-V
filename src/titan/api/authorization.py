@@ -45,6 +45,8 @@ class ResourceGrantResponse(BaseModel):
     status: str
     expires_at: datetime | None
 
+    model_config = {"from_attributes": True}
+
 
 class DelegationRequest(BaseModel):
     delegatee_subject: str = Field(min_length=1, max_length=255)
@@ -66,6 +68,8 @@ class DelegationResponse(BaseModel):
     starts_at: datetime
     expires_at: datetime
     revoked_at: datetime | None
+
+    model_config = {"from_attributes": True}
 
 
 @router.post(
@@ -173,6 +177,8 @@ async def create_delegation(
     )
     if delegatee is None:
         raise HTTPException(status_code=404, detail="Delegatee operator user not found")
+    if operator.user_id == delegatee.id:
+        raise HTTPException(status_code=422, detail="An operator cannot delegate to themself")
     if operator.user_id is None:
         raise HTTPException(status_code=409, detail="Delegation requires a persistent operator session")
 
