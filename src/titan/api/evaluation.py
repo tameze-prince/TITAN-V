@@ -168,7 +168,7 @@ async def create_evaluator_profile(
     await session.commit()
     criteria = await store.criteria(session, profile_id=row.id)
     return EvaluationProfileResponse(
-        **EvaluationProfileResponse.model_validate(row).model_dump(),
+        **EvaluationProfileResponse.model_validate(row).model_dump(exclude={"criteria"}),
         criteria=[EvaluationCriterionResponse.model_validate(item) for item in criteria],
     )
 
