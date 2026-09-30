@@ -11034,3 +11034,83 @@ TITAN DELEGATION + POLICY ESCALATION + RESOURCE RBAC
 ~~~
 
 ---
+
+# 236. TITAN DELEGATION + POLICY ESCALATION + RESOURCE RBAC CHECKPOINT — 2026-09-30
+
+## Status
+
+TITAN now has a centralized resource-authorization layer above the existing global operator roles.
+
+Implemented:
+
+~~~text
+[X] Resource-level permission grants
+[X] Resource RBAC enforcement mode
+[X] Administrator bypass option
+[X] Persistent operator delegations
+[X] Delegation expiry
+[X] Delegation revocation
+[X] Delegation permission containment
+[X] Project-scoped delegation policy
+[X] Policy-driven approval quorum override
+[X] Policy-driven minimum approval role
+[X] Time-based escalation from operator to admin
+[X] Durable governance decision for approval escalation
+[X] Effective policy quorum aligned between API and Temporal
+[X] Resource authorization migration 0010
+[X] Fail-closed resource RBAC for identities without persistent user records
+~~~
+
+## Authorization model
+
+~~~text
+GLOBAL ROLE
+    +
+RESOURCE GRANT
+    +
+ACTIVE DELEGATION
+    +
+EFFECTIVE POLICY
+    ↓
+AUTHORIZED ACTION
+~~~
+
+Resource RBAC can be activated with:
+
+~~~text
+TITAN_RESOURCE_RBAC_REQUIRED=true
+~~~
+
+When enabled, persistent operator identities receive access only through resource grants or valid delegations, except for the configured administrator bypass.
+
+## Delegation
+
+Delegation is explicit, resource-scoped, permission-scoped, time-limited, revocable, and audited.
+
+Delegation does not change the delegatee's global role. It only grants the specific permissions configured by the delegator.
+
+## Approval escalation
+
+A `task_approval` policy can define quorum, minimum role, escalation role, escalation delay, and whether delegation is allowed.
+
+The effective quorum is the greater of the task quorum and policy quorum. The same calculation is used when building WorkflowInput and when processing operator decisions.
+
+## Not yet implemented
+
+~~~text
+[ ] Resource RBAC UI in Command Center
+[ ] Delegation UI
+[ ] Policy editor UI
+[ ] Cross-project operator administration view
+[ ] Automated notification channel for escalations
+[ ] Upstream refresh-token rotation
+[ ] Event retention / archival strategy
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN EVIDENCE + EVALUATION + SELF-REPAIR
+~~~
+
+---
