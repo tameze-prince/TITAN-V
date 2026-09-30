@@ -98,7 +98,9 @@ async def resolve_active_profile(
         .limit(1)
     )
     if row is None:
-        return DEFAULT_PROFILE
+        if name == DEFAULT_PROFILE.name:
+            return DEFAULT_PROFILE
+        raise ValueError(f"No active evaluator profile named '{name}' is configured")
 
     criteria_rows = list(
         await session.scalars(
