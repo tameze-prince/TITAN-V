@@ -139,7 +139,7 @@ class OpenAIResponsesProvider(ModelProvider):
 
         return ModelResponse(
             provider=self.name,
-            model=self._model,
+            model=requested_model,
             parsed=parsed,
             usage=usage,
         )
