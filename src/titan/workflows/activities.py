@@ -11,6 +11,7 @@ from titan.persistence.database import SessionFactory
 from titan.persistence.models import (
     ArtifactModel,
     EvaluationModel,
+    OperatorNotificationModel,
     EventModel,
     ProjectModel,
     ProjectStateModel,
@@ -23,6 +24,7 @@ from titan.persistence.models import (
 )
 from titan.runtime.contracts import AgentTaskContext
 from titan.runtime.evaluation_service import EvaluationEngine
+from titan.runtime.evaluator_profiles import resolve_active_profile
 from titan.runtime.governance import GovernanceEngine
 from titan.runtime.governance_audit import record_governance_decision
 from titan.runtime.memory import MemoryStore
@@ -281,6 +283,19 @@ async def orchestrate_task(
             session.add(artifact)
             await session.flush()
 
+            profile = await resolve_active_profile(
+                session,
+                project_id=task.project_id,
+                name=settings.quality_profile_name,
+            )
+            evaluator_model = profile.evaluator_model or settings.quality_evaluator_model
+            evaluator_provider = None
+            if profile.evaluator_kind.upper() == "MODEL" and evaluator_model:
+                try:
+                    evaluator_provider = runtime.providers.resolve(evaluator_model)
+                except (KeyError, ValueError):
+                    evaluator_provider = None
+
             session.add(
                 EventModel(
                     project_id=task.project_id,
@@ -291,28 +306,25 @@ async def orchestrate_task(
                     payload={
                         "run_id": run_id,
                         "artifact_id": str(artifact.id),
-                        "evaluator_type": EvaluationEngine.EVALUATOR_TYPE,
-                        "evaluator_version": settings.quality_gate_evaluator_version,
+                        "evaluator_profile": profile.name,
+                        "evaluator_profile_version": profile.version,
+                        "evaluator_kind": profile.evaluator_kind,
+                        "evaluator_model": evaluator_model,
                         "producer_agent": execution.agent_name,
-                        "independent": True,
+                        "producer_model": execution.model,
                         "repair_attempt": repair_attempt_number,
                     },
                 )
             )
 
-            evaluation_result = evaluation_engine.evaluate_execution(
+            evaluation_result = await evaluation_engine.evaluate_with_profile(
+                profile=profile,
                 output=execution.output,
                 task_objective=task.objective,
                 producer_agent=execution.agent_name,
-            )
-            evaluation_result = type(evaluation_result)(
-                passed=evaluation_result.passed,
-                score=evaluation_result.score,
-                confidence=evaluation_result.confidence,
-                checks=evaluation_result.checks,
-                evaluator_type=evaluation_result.evaluator_type,
-                independent=evaluation_result.independent,
-                evaluator_version=settings.quality_gate_evaluator_version,
+                producer_model=execution.model,
+                provider=evaluator_provider,
+                evaluator_model=evaluator_model,
             )
             evaluation = await evaluation_engine.persist(
                 session,
@@ -359,10 +371,58 @@ async def orchestrate_task(
                 )
             )
 
+            evaluation_needs_review = (
+                evaluation_result.decision == "NEEDS_REVIEW"
+                or not evaluation_result.independent
+            )
             failed_quality_gate = (
                 not evaluation_result.passed
-                or evaluation_result.score < settings.quality_gate_min_score
+                or evaluation_result.score < profile.min_score
+                or evaluation_result.confidence < profile.min_confidence
             )
+            if evaluation_needs_review:
+                task.status = "FAILED"
+                session.add(
+                    OperatorNotificationModel(
+                        project_id=task.project_id,
+                        evaluation_id=evaluation.id,
+                        task_id=task.id,
+                        severity="CRITICAL",
+                        notification_type="QUALITY_ESCALATION",
+                        title="Evaluation requires human review",
+                        body=(
+                            f"Task '{task.title}' could not receive an independent "
+                            f"quality decision from evaluator profile "
+                            f"{profile.name} v{profile.version}."
+                        ),
+                    )
+                )
+                session.add(
+                    EventModel(
+                        project_id=task.project_id,
+                        type="EvaluationEscalated",
+                        actor_type="SYSTEM",
+                        aggregate_type="EVALUATION",
+                        aggregate_id=evaluation.id,
+                        payload={
+                            "task_id": task_id,
+                            "reason": "Evaluator unavailable or not independent",
+                            "evaluator_type": evaluation_result.evaluator_type,
+                            "profile_name": evaluation_result.profile_name,
+                            "profile_version": evaluation_result.profile_version,
+                        },
+                    )
+                )
+                await session.commit()
+                raise AgentEvaluationFailure(
+                    evaluation=evaluation_result.to_report(),
+                    plan=repair_planner.build(
+                        evaluation=evaluation_result.to_report(),
+                        attempt=max(1, current_attempt),
+                        prior_context=repair_inputs,
+                    ),
+                )
+
             if failed_quality_gate:
                 failed_report = evaluation_result.to_report()
                 plan = repair_planner.build(
@@ -373,6 +433,82 @@ async def orchestrate_task(
                 final_attempt = current_attempt >= settings.repair_max_attempts + 1
 
                 if latest_repair is not None and latest_repair.status == "STARTED":
+                    latest_repair.status = "FAILED"
+                    latest_repair.completed_at = datetime.now(UTC)
+
+                if final_attempt:
+                    task.status = "FAILED"
+                    session.add(
+                        OperatorNotificationModel(
+                            project_id=task.project_id,
+                            evaluation_id=evaluation.id,
+                            task_id=task.id,
+                            severity="WARNING",
+                            notification_type="REPAIR_ESCALATION",
+                            title="Self-repair budget exhausted",
+                            body=(
+                                f"Task '{task.title}' failed the quality gate after "
+                                f"{settings.repair_max_attempts} repair attempts. "
+                                "Human review is required."
+                            ),
+                        )
+                    )
+                    session.add(
+                        EventModel(
+                            project_id=task.project_id,
+                            type="TaskFailed",
+                            actor_type="SYSTEM",
+                            aggregate_type="TASK",
+                            aggregate_id=task.id,
+                            payload={
+                                "run_id": run_id,
+                                "reason": "Quality gate failed after bounded self-repair",
+                                "evaluation_id": str(evaluation.id),
+                                "attempt": current_attempt,
+                                "max_attempts": settings.repair_max_attempts,
+                            },
+                        )
+                    )
+                    await session.commit()
+                    raise AgentEvaluationFailure(
+                        evaluation=failed_report,
+                        plan=plan,
+                    )
+
+                repair = await evaluation_engine.plan_repair(
+                    session,
+                    evaluation_id=evaluation.id,
+                    task_id=task.id,
+                    attempt=current_attempt,
+                    diagnosis=plan.diagnosis,
+                    corrective_action=plan.corrective_action,
+                    max_attempts=settings.repair_max_attempts,
+                )
+                task.status = "REPAIRING"
+                session.add(
+                    EventModel(
+                        project_id=task.project_id,
+                        type="RepairPlanned",
+                        actor_type="SYSTEM",
+                        aggregate_type="TASK",
+                        aggregate_id=task.id,
+                        payload={
+                            "run_id": run_id,
+                            "repair_attempt": repair.attempt,
+                            "max_attempts": repair.max_attempts,
+                            "evaluation_id": str(evaluation.id),
+                            "diagnosis": repair.diagnosis,
+                            "corrective_action": repair.corrective_action,
+                        },
+                    )
+                )
+                await session.commit()
+                raise AgentEvaluationFailure(
+                    evaluation=failed_report,
+                    plan=plan,
+                )
+
+            if latest_repair is not None and latest_repair.status == "STARTED":
                     latest_repair.status = "FAILED"
                     latest_repair.completed_at = datetime.now(UTC)
 
