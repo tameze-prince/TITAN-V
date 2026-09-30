@@ -17,6 +17,13 @@ class PolicyDefinition(BaseModel):
     recovery_min_autonomy_level: int = Field(default=3, ge=0, le=5)
     recovery_max_auto_risk_level: str = Field(default="R1", pattern=r"^R[0-4]$")
     require_human_approval_for_recovery: bool = False
+    task_approval_quorum: int = Field(default=1, ge=1, le=10)
+    task_approval_min_role: str = Field(default="operator", pattern=r"^(viewer|operator|admin)$")
+    task_approval_escalation_role: str = Field(default="admin", pattern=r"^(viewer|operator|admin)$")
+    task_approval_escalation_enabled: bool = True
+    task_approval_escalation_after_seconds: int = Field(default=0, ge=0, le=86_400)
+    delegation_allowed: bool = False
+    delegation_max_ttl_seconds: int = Field(default=3_600, ge=60, le=86_400)
 
 
 class PolicyVersionStore:
