@@ -12,6 +12,7 @@ from titan import __version__
 from titan.api.auth import router as auth_router
 from titan.api.authorization import router as authorization_router
 from titan.api.control_plane import router as control_plane_router
+from titan.api.evaluation import router as evaluation_router
 from titan.config import settings
 from titan.integrations.temporal.client import get_temporal_client
 from titan.persistence.database import close_database, get_session
@@ -463,6 +464,7 @@ app = FastAPI(title="TITAN V.", version=__version__, lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(authorization_router)
 app.include_router(control_plane_router)
+app.include_router(evaluation_router)
 
 
 @app.get("/health")
