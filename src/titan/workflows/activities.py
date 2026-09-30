@@ -456,6 +456,254 @@ async def orchestrate_task(
 
 
 @activity.defn
+async def mark_task_waiting_for_approval(
+    workflow_id: str,
+    task_id: str,
+    run_id: str,
+) -> str:
+    workflow_uuid = UUID(workflow_id)
+    task_uuid = UUID(task_id)
+
+    async with SessionFactory() as session:
+        task = await session.scalar(
+            select(TaskModel)
+            .where(
+                TaskModel.id == task_uuid,
+                TaskModel.workflow_id == workflow_uuid,
+            )
+            .with_for_update()
+        )
+        if task is None:
+            raise ValueError(f"Approval task {task_id} not found")
+
+        if task.status == "APPROVED":
+            return "APPROVED"
+        if task.status == "COMPLETED":
+            return "COMPLETED"
+        if task.status == "REJECTED":
+            return "REJECTED"
+        if task.status == "WAITING_APPROVAL":
+            return "WAITING_APPROVAL"
+
+        task.status = "WAITING_APPROVAL"
+        session.add(
+            EventModel(
+                project_id=task.project_id,
+                type="TaskApprovalRequested",
+                actor_type="SYSTEM",
+                aggregate_type="TASK",
+                aggregate_id=task.id,
+                payload={
+                    "workflow_id": workflow_id,
+                    "run_id": run_id,
+                    "approval_requirement": task.approval_requirement,
+                    "reason": "Task requires human approval before execution",
+                },
+            )
+        )
+        state = await session.scalar(
+            select(ProjectStateModel).where(
+                ProjectStateModel.project_id == task.project_id
+            )
+        )
+        if state is not None:
+            state.status = "WAITING_HUMAN"
+            state.phase = "WAITING_APPROVAL"
+            state.version += 1
+
+        await session.commit()
+        return "WAITING_APPROVAL"
+
+
+@activity.defn
+async def mark_task_approval_rejected(
+    workflow_id: str,
+    task_id: str,
+    reason: str,
+) -> None:
+    workflow_uuid = UUID(workflow_id)
+    task_uuid = UUID(task_id)
+
+    async with SessionFactory() as session:
+        task = await session.scalar(
+            select(TaskModel).where(
+                TaskModel.id == task_uuid,
+                TaskModel.workflow_id == workflow_uuid,
+            )
+        )
+        if task is None:
+            raise ValueError(f"Approval task {task_id} not found")
+
+        task.status = "REJECTED"
+        session.add(
+            EventModel(
+                project_id=task.project_id,
+                type="TaskApprovalRejected",
+                actor_type="OPERATOR",
+                aggregate_type="TASK",
+                aggregate_id=task.id,
+                payload={
+                    "reason": reason or "Task approval rejected by operator",
+                },
+            )
+        )
+        await session.commit()
+
+
+@activity.defn
+async def mark_workflow_approval_expired(
+    workflow_id: str,
+    run_id: str,
+    task_id: str,
+    timeout_seconds: int,
+) -> str:
+    workflow_uuid = UUID(workflow_id)
+    run_uuid = UUID(run_id)
+    task_uuid = UUID(task_id)
+
+    async with SessionFactory() as session:
+        workflow = await session.scalar(
+            select(WorkflowModel).where(WorkflowModel.id == workflow_uuid)
+        )
+        run = await session.scalar(select(RunModel).where(RunModel.id == run_uuid))
+        task = await session.scalar(
+            select(TaskModel).where(
+                TaskModel.id == task_uuid,
+                TaskModel.workflow_id == workflow_uuid,
+            )
+        )
+        if workflow is None or run is None or task is None:
+            raise ValueError("Workflow approval timeout state not found")
+
+        now = datetime.now(UTC)
+        if task.status in {"APPROVED", "COMPLETED", "REJECTED", "EXPIRED"}:
+            return task.status
+
+        task.status = "EXPIRED"
+        workflow.status = "EXPIRED"
+        workflow.completed_at = now
+        run.status = "EXPIRED"
+        run.completed_at = now
+
+        state = await session.scalar(
+            select(ProjectStateModel).where(
+                ProjectStateModel.project_id == workflow.project_id
+            )
+        )
+        if state is not None:
+            state.status = "EXPIRED"
+            state.phase = "HUMAN_APPROVAL_TIMEOUT"
+            state.version += 1
+
+        if workflow.task_graph_id is not None:
+            graph = await session.scalar(
+                select(TaskGraphModel).where(TaskGraphModel.id == workflow.task_graph_id)
+            )
+            if graph is not None:
+                graph.status = "EXPIRED"
+
+        session.add(
+            EventModel(
+                project_id=workflow.project_id,
+                type="TaskApprovalExpired",
+                actor_type="SYSTEM",
+                aggregate_type="TASK",
+                aggregate_id=task.id,
+                payload={
+                    "workflow_id": workflow_id,
+                    "run_id": run_id,
+                    "timeout_seconds": timeout_seconds,
+                    "reason": "Human approval window expired",
+                },
+            )
+        )
+        session.add(
+            EventModel(
+                project_id=workflow.project_id,
+                type="WorkflowApprovalExpired",
+                actor_type="SYSTEM",
+                aggregate_type="WORKFLOW",
+                aggregate_id=workflow.id,
+                payload={
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "timeout_seconds": timeout_seconds,
+                    "reason": "Human approval window expired",
+                },
+            )
+        )
+        await session.commit()
+        return "EXPIRED"
+
+
+@activity.defn
+async def mark_workflow_rejected(
+    workflow_id: str,
+    run_id: str,
+    task_id: str,
+    reason: str,
+    operator_subject: str = "unknown",
+    operator_role: str = "unknown",
+) -> None:
+    workflow_uuid = UUID(workflow_id)
+    run_uuid = UUID(run_id)
+
+    async with SessionFactory() as session:
+        workflow = await session.scalar(
+            select(WorkflowModel).where(WorkflowModel.id == workflow_uuid)
+        )
+        run = await session.scalar(
+            select(RunModel).where(RunModel.id == run_uuid)
+        )
+        if workflow is None or run is None:
+            raise ValueError("Workflow run state not found")
+
+        now = datetime.now(UTC)
+        workflow.status = "REJECTED"
+        workflow.completed_at = now
+        run.status = "REJECTED"
+        run.completed_at = now
+
+        state = await session.scalar(
+            select(ProjectStateModel).where(
+                ProjectStateModel.project_id == workflow.project_id
+            )
+        )
+        if state is not None:
+            state.status = "REJECTED"
+            state.phase = "HUMAN_REJECTED"
+            state.version += 1
+
+        if workflow.task_graph_id is not None:
+            graph = await session.scalar(
+                select(TaskGraphModel).where(
+                    TaskGraphModel.id == workflow.task_graph_id
+                )
+            )
+            if graph is not None:
+                graph.status = "REJECTED"
+
+        session.add(
+            EventModel(
+                project_id=workflow.project_id,
+                type="WorkflowRejected",
+                actor_type="OPERATOR",
+                actor_subject=operator_subject,
+                aggregate_type="WORKFLOW",
+                aggregate_id=workflow.id,
+                payload={
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "reason": reason or "Workflow execution rejected by operator",
+                    "operator_subject": operator_subject,
+                    "operator_role": operator_role,
+                },
+            )
+        )
+        await session.commit()
+
+
+@activity.defn
 async def mark_workflow_completed(
     workflow_id: str,
     run_id: str,

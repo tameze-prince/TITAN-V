@@ -4,11 +4,14 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio.client import Client
 
 from titan import __version__
+from titan.api.auth import router as auth_router
+from titan.api.authorization import router as authorization_router
+from titan.api.control_plane import router as control_plane_router
 from titan.config import settings
 from titan.integrations.temporal.client import get_temporal_client
 from titan.persistence.database import close_database, get_session
@@ -22,6 +25,7 @@ from titan.persistence.models import (
     ProjectStateModel,
     TaskGraphModel,
     TaskModel,
+    TaskApprovalDecisionModel,
     WorkflowModel,
     task_dependencies,
 )
@@ -30,6 +34,10 @@ from titan.runtime.intent import IntentCompiler, IntentRepresentation
 from titan.runtime.memory import MemoryStore
 from titan.runtime.policy_store import PolicyDefinition, PolicyVersionStore
 from titan.runtime.model_router import BudgetExceeded, ModelBudget, ModelSelectionRequest
+from titan.runtime.operator_auth import OperatorIdentity, require_operator
+from titan.runtime.approval_policy import resolve_task_approval_policy
+from titan.runtime.governance import task_requires_human_approval
+from titan.runtime.resource_access import require_resource_permission, role_at_least
 from titan.runtime.planner import CapabilityResolutionError, TaskGraphPlanner
 from titan.runtime.scheduler import DependencyAwareScheduler, TaskScheduleError, TaskSchedulingProfile
 from titan.runtime.planning_service import persist_task_graph
@@ -120,6 +128,8 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     objective: str = Field(min_length=1, max_length=10_000)
     risk_level: str = Field(default="R1", pattern=r"^R[0-4]$")
+    approval_requirement: str = Field(default="NONE", min_length=1, max_length=32)
+    approval_quorum: int = Field(default=1, ge=1, le=10)
 
 
 class TaskResponse(BaseModel):
@@ -134,8 +144,26 @@ class TaskResponse(BaseModel):
     risk_level: str
     position: int
     required_capabilities: list[str]
+    approval_requirement: str
+    approval_quorum: int
 
     model_config = {"from_attributes": True}
+
+
+class TaskApprovalRequest(BaseModel):
+    approved: bool
+    reason: str = Field(default="", max_length=2_000)
+
+
+class TaskApprovalResponse(BaseModel):
+    project_id: UUID
+    task_id: UUID
+    workflow_id: UUID
+    decision: str
+    reason: str
+    status: str
+    approval_quorum: int
+    approval_count: int
 
 
 class WorkflowCreate(BaseModel):
@@ -198,6 +226,8 @@ class PlannedTaskResponse(BaseModel):
     agent_name: str
     risk_level: str
     status: str
+    approval_requirement: str
+    approval_quorum: int
 
 
 class TaskGraphResponse(BaseModel):
@@ -249,7 +279,9 @@ class ReplanResponse(BaseModel):
 async def create_policy_version(
     payload: PolicyCreateRequest,
     session: AsyncSession = Depends(get_session),
+    operator: OperatorIdentity = Depends(require_operator),
 ) -> PolicyVersionModel:
+    operator.require_permission("policy:admin")
     store = PolicyVersionStore()
     try:
         row = await store.create(
@@ -298,7 +330,9 @@ async def list_policy_versions(
     scope_type: str | None = None,
     scope_id: UUID | None = None,
     session: AsyncSession = Depends(get_session),
+    operator: OperatorIdentity = Depends(require_operator),
 ) -> list[PolicyVersionModel]:
+    operator.require_permission("control_plane:read")
     return await PolicyVersionStore().list_versions(
         session,
         policy_name=policy_name,
@@ -426,6 +460,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="TITAN V.", version=__version__, lifespan=lifespan)
+app.include_router(auth_router)
+app.include_router(authorization_router)
+app.include_router(control_plane_router)
 
 
 @app.get("/health")
@@ -720,6 +757,8 @@ async def create_task_graph_plan(
                 agent_name=node.agent_name,
                 risk_level=task.risk_level,
                 status=task.status,
+                approval_requirement=task.approval_requirement,
+                approval_quorum=approval_policies[str(task.id)].quorum,
             )
         )
 
@@ -871,7 +910,9 @@ async def decide_recovery(
     workflow_id: UUID,
     payload: RecoveryDecisionRequest,
     session: AsyncSession = Depends(get_session),
+    operator: OperatorIdentity = Depends(require_operator),
 ) -> RecoveryDecisionResponse:
+    operator.require_permission("recovery:approve")
     project = await session.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
     workflow = await session.scalar(
         select(WorkflowModel).where(
@@ -919,12 +960,17 @@ async def decide_recovery(
             EventModel(
                 project_id=project_id,
                 type="RecoveryRejected",
-                actor_type="USER",
+                actor_type="OPERATOR",
+                actor_subject=operator.subject,
                 aggregate_type="WORKFLOW",
                 aggregate_id=workflow.id,
                 payload={
                     "reason": payload.reason or "Recovery rejected by human decision",
                     "current_attempt": current_attempt,
+                    "operator_subject": operator.subject,
+                    "operator_role": operator.role,
+                    "operator_auth_method": operator.auth_method,
+                    "operator_issuer": operator.issuer,
                 },
             )
         )
@@ -989,13 +1035,18 @@ async def decide_recovery(
         EventModel(
             project_id=project_id,
             type="RecoveryApproved",
-            actor_type="USER",
+            actor_type="OPERATOR",
+            actor_subject=operator.subject,
             aggregate_type="WORKFLOW",
             aggregate_id=workflow.id,
             payload={
                 "reason": payload.reason or "Recovery approved by human decision",
                 "current_attempt": current_attempt,
                 "strategy": strategy.value,
+                "operator_subject": operator.subject,
+                "operator_role": operator.role,
+                "operator_auth_method": operator.auth_method,
+                "operator_issuer": operator.issuer,
                 "failure_category": failure_category,
             },
         )
@@ -1061,7 +1112,9 @@ async def rollback_recovery(
     payload: RecoveryRollbackRequest,
     session: AsyncSession = Depends(get_session),
     temporal_client: Client = Depends(get_temporal_client),
+    operator: OperatorIdentity = Depends(require_operator),
 ) -> RecoveryRollbackResponse:
+    operator.require_permission("recovery:rollback")
     project = await session.scalar(select(ProjectModel).where(ProjectModel.id == project_id))
     workflow = await session.scalar(
         select(WorkflowModel).where(
@@ -1143,7 +1196,8 @@ async def rollback_recovery(
         EventModel(
             project_id=project_id,
             type="RecoveryRolledBack",
-            actor_type="USER",
+            actor_type="OPERATOR",
+            actor_subject=operator.subject,
             aggregate_type="WORKFLOW",
             aggregate_id=workflow.id,
             payload={
@@ -1152,6 +1206,10 @@ async def rollback_recovery(
                 else None,
                 "task_graph_id": str(graph.id) if graph is not None else None,
                 "reason": payload.reason,
+                "operator_subject": operator.subject,
+                "operator_role": operator.role,
+                "operator_auth_method": operator.auth_method,
+                "operator_issuer": operator.issuer,
             },
         )
     )
@@ -1168,6 +1226,8 @@ async def rollback_recovery(
                 else None,
                 "reason": payload.reason,
                 "external_side_effects_reversed": False,
+                "operator_subject": operator.subject,
+                "operator_role": operator.role,
             },
         )
     )
@@ -1221,6 +1281,8 @@ async def create_task(
         title=payload.title,
         objective=payload.objective,
         risk_level=payload.risk_level,
+        approval_requirement=payload.approval_requirement,
+        approval_quorum=payload.approval_quorum,
     )
     session.add(task)
     await session.flush()
@@ -1238,6 +1300,294 @@ async def create_task(
     await session.commit()
     await session.refresh(task)
     return task
+
+
+
+@app.post(
+    "/api/v1/projects/{project_id}/tasks/{task_id}/approval",
+    response_model=TaskApprovalResponse,
+)
+async def decide_task_approval(
+    project_id: UUID,
+    task_id: UUID,
+    payload: TaskApprovalRequest,
+    session: AsyncSession = Depends(get_session),
+    temporal_client: Client = Depends(get_temporal_client),
+    operator: OperatorIdentity = Depends(require_operator),
+) -> TaskApprovalResponse:
+    operator.require_permission("task:approve")
+
+    await require_resource_permission(
+        session,
+        operator=operator,
+        permission="task:approve",
+        resource_type="project",
+        resource_id=project_id,
+    )
+
+    task = await session.scalar(
+        select(TaskModel)
+        .where(
+            TaskModel.id == task_id,
+            TaskModel.project_id == project_id,
+        )
+        .with_for_update()
+    )
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    if task.workflow_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Task is not attached to a workflow",
+        )
+    if task.status != "WAITING_APPROVAL":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Task approval requires WAITING_APPROVAL status; current status is {task.status}",
+        )
+
+    workflow = await session.scalar(
+        select(WorkflowModel).where(
+            WorkflowModel.id == task.workflow_id,
+            WorkflowModel.project_id == project_id,
+        )
+    )
+    if workflow is None or not workflow.temporal_workflow_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Task workflow is not running with a Temporal workflow id",
+        )
+
+    existing = await session.scalar(
+        select(TaskApprovalDecisionModel)
+        .where(
+            TaskApprovalDecisionModel.task_id == task.id,
+            TaskApprovalDecisionModel.operator_subject == operator.subject,
+        )
+        .with_for_update()
+    )
+    requested_decision = "APPROVE" if payload.approved else "REJECT"
+
+    if existing is not None and existing.decision != requested_decision:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This operator has already recorded the opposite decision",
+        )
+
+    approval_policy = await resolve_task_approval_policy(
+        session,
+        project_id=project_id,
+        task=task,
+    )
+
+    if not role_at_least(operator.role, approval_policy.minimum_role):
+        escalation_payload = {
+            "operator_subject": operator.subject,
+            "operator_role": operator.role,
+            "required_role": approval_policy.minimum_role,
+            "escalation_role": approval_policy.escalation_role,
+            "escalation_enabled": approval_policy.escalation_enabled,
+            "task_id": str(task.id),
+        }
+        if approval_policy.escalation_enabled:
+            session.add(
+                EventModel(
+                    project_id=project_id,
+                    type="TaskApprovalEscalated",
+                    actor_type="OPERATOR",
+                    actor_subject=operator.subject,
+                    aggregate_type="TASK",
+                    aggregate_id=task.id,
+                    payload=escalation_payload,
+                )
+            )
+            session.add(
+                GovernanceDecisionModel(
+                    project_id=project_id,
+                    workflow_id=workflow.id,
+                    task_id=task.id,
+                    domain="TASK_APPROVAL",
+                    action="ESCALATE",
+                    allowed=False,
+                    requires_human=True,
+                    reason=(
+                        f"Approval requires role '{approval_policy.minimum_role}'"
+                    ),
+                    checks_json=[
+                        {
+                            "policy": "task-approval-role",
+                            "required_role": approval_policy.minimum_role,
+                            "escalation_role": approval_policy.escalation_role,
+                        }
+                    ],
+                    context_json=escalation_payload,
+                )
+            )
+            await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Task approval requires role '{approval_policy.minimum_role}'. "
+                f"Escalation target: '{approval_policy.escalation_role}'."
+            ),
+        )
+
+    effective_quorum = approval_policy.quorum
+
+    reason = payload.reason or (
+        "Task approved by operator"
+        if payload.approved
+        else "Task rejected by operator"
+    )
+
+    if existing is None:
+        existing = TaskApprovalDecisionModel(
+            project_id=project_id,
+            workflow_id=workflow.id,
+            task_id=task.id,
+            operator_user_id=operator.user_id,
+            operator_subject=operator.subject,
+            operator_role=operator.role,
+            decision=requested_decision,
+            reason=reason,
+        )
+        session.add(existing)
+
+    approved_count = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(TaskApprovalDecisionModel)
+            .where(
+                TaskApprovalDecisionModel.task_id == task.id,
+                TaskApprovalDecisionModel.decision == "APPROVE",
+            )
+        )
+        or 0
+    )
+
+    if payload.approved:
+        final_approval = approved_count >= effective_quorum
+        if final_approval:
+            task.status = "APPROVED"
+        event_type = "TaskApprovalGranted" if final_approval else "TaskApprovalRecorded"
+    else:
+        final_approval = False
+        task.status = "REJECTED"
+        event_type = "TaskApprovalRejected"
+
+    session.add(
+        EventModel(
+            project_id=project_id,
+            type=event_type,
+            actor_type="OPERATOR",
+            actor_id=None,
+            actor_subject=operator.subject,
+            aggregate_type="TASK",
+            aggregate_id=task.id,
+            payload={
+                "workflow_id": str(workflow.id),
+                "operator_subject": operator.subject,
+                "operator_role": operator.role,
+                "operator_auth_method": operator.auth_method,
+                "operator_issuer": operator.issuer,
+                "reason": reason,
+                "approval_quorum": effective_quorum,
+                "approval_count": approved_count,
+            },
+        )
+    )
+
+    state = await session.scalar(
+        select(ProjectStateModel).where(
+            ProjectStateModel.project_id == project_id
+        )
+    )
+    if state is not None:
+        if payload.approved and final_approval:
+            state.status = "RUNNING"
+            state.phase = "EXECUTION"
+        elif payload.approved:
+            state.status = "WAITING_HUMAN"
+            state.phase = "WAITING_APPROVAL"
+        else:
+            state.status = "REJECTED"
+            state.phase = "HUMAN_REJECTED"
+        state.version += 1
+
+    await session.commit()
+
+    handle = temporal_client.get_workflow_handle(workflow.temporal_workflow_id)
+    try:
+        if payload.approved:
+            await handle.signal(
+                "approve_task",
+                str(task.id),
+                operator.subject,
+                approved_count,
+            )
+        else:
+            await handle.signal(
+                "reject_task",
+                str(task.id),
+                reason,
+                operator.subject,
+                operator.role,
+            )
+    except Exception as exc:
+        if payload.approved:
+            task.status = "WAITING_APPROVAL"
+            compensation_state = await session.scalar(
+                select(ProjectStateModel).where(
+                    ProjectStateModel.project_id == project_id
+                )
+            )
+            if compensation_state is not None:
+                compensation_state.status = "WAITING_HUMAN"
+                compensation_state.phase = "WAITING_APPROVAL"
+                compensation_state.version += 1
+        session.add(
+            EventModel(
+                project_id=project_id,
+                type="TaskApprovalSignalFailed",
+                actor_type="SYSTEM",
+                actor_subject=operator.subject,
+                aggregate_type="TASK",
+                aggregate_id=task.id,
+                payload={
+                    "operator_subject": operator.subject,
+                    "decision": requested_decision,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "approval_quorum": task.approval_quorum,
+                    "approval_count": approved_count,
+                },
+            )
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Temporal workflow could not receive the approval decision",
+        ) from exc
+
+    return TaskApprovalResponse(
+        project_id=project_id,
+        task_id=task.id,
+        workflow_id=workflow.id,
+        decision=(
+            "APPROVED"
+            if payload.approved and final_approval
+            else "RECORDED"
+            if payload.approved
+            else "REJECTED"
+        ),
+        reason=reason,
+        status=task.status,
+        approval_quorum=effective_quorum,
+        approval_count=approved_count,
+    )
 
 
 @app.post(
@@ -1345,6 +1695,14 @@ async def create_and_start_workflow(
     await session.commit()
 
     requested_ids = tuple(str(task.id) for task in tasks)
+    approval_policies = {
+        str(task.id): await resolve_task_approval_policy(
+            session,
+            project_id=project_id,
+            task=task,
+        )
+        for task in tasks
+    }
     dependency_rows = list(
         await session.execute(
             select(
@@ -1548,6 +1906,25 @@ async def create_and_start_workflow(
         task_profiles=tuple(task_profiles),
         max_project_cost=settings.orchestration_max_cost,
         precompleted_task_ids=precompleted_task_ids,
+        approval_task_ids=tuple(
+            str(task.id)
+            for task in tasks
+            if task_requires_human_approval(
+                risk_level=task.risk_level,
+                approval_requirement=task.approval_requirement,
+                approval_quorum=approval_policies[str(task.id)].quorum,
+            )
+        ),
+        approval_quorums=tuple(
+            (str(task.id), approval_policies[str(task.id)].quorum)
+            for task in tasks
+            if task_requires_human_approval(
+                risk_level=task.risk_level,
+                approval_requirement=task.approval_requirement,
+                approval_quorum=approval_policies[str(task.id)].quorum,
+            )
+        ),
+        approval_timeout_seconds=max(1, settings.human_approval_timeout_seconds),
     )
 
     try:

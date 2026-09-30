@@ -88,6 +88,7 @@ async def persist_task_graph(
             status="PENDING",
             risk_level=node.risk_level,
             approval_requirement=node.approval_requirement,
+            approval_quorum=node.approval_quorum,
             required_capabilities=list(node.required_capabilities),
         )
         session.add(task)

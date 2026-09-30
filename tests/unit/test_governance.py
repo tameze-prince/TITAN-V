@@ -115,3 +115,47 @@ def test_governance_denies_model_budget_before_execution() -> None:
 
     assert decision.action is GovernanceAction.DENY
     assert "exceeds configured budget" in decision.reason
+
+
+def test_multi_operator_quorum_requires_human_approval() -> None:
+    from titan.runtime.governance import task_requires_human_approval
+
+    assert task_requires_human_approval(
+        risk_level="R1",
+        approval_requirement="NONE",
+        approval_quorum=2,
+    )
+
+
+def test_risk_aware_task_approval_gate() -> None:
+    from titan.runtime.governance import task_requires_human_approval
+
+    assert not task_requires_human_approval(
+        risk_level="R1",
+        approval_requirement="NONE",
+    )
+    assert task_requires_human_approval(
+        risk_level="R1",
+        approval_requirement="HUMAN",
+    )
+    assert task_requires_human_approval(
+        risk_level="R2",
+        approval_requirement="NONE",
+    )
+
+
+def test_policy_definition_supports_task_approval_escalation() -> None:
+    from titan.runtime.policy_store import PolicyDefinition
+
+    policy = PolicyDefinition(
+        task_approval_quorum=2,
+        task_approval_min_role="operator",
+        task_approval_escalation_role="admin",
+        task_approval_escalation_enabled=True,
+        delegation_allowed=True,
+        delegation_max_ttl_seconds=3_600,
+    )
+
+    assert policy.task_approval_quorum == 2
+    assert policy.task_approval_escalation_role == "admin"
+    assert policy.delegation_allowed is True

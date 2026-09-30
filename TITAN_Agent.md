@@ -4,7 +4,7 @@
 > **Version:** 0.1.0  
 > **Document:** `TITAN_Agent.md`  
 > **Purpose:** Single evolving source of truth for the conception, architecture, implementation, validation, evolution, and operation of TITAN V.  
-> **Last updated:** 2026-09-20
+> **Last updated:** 2026-09-29
 
 ---
 
@@ -10332,3 +10332,705 @@ Operator / Human Control Surface
 ---
 
 # END OF EXECUTION OBSERVABILITY + EXPLAINABILITY CHECKPOINT
+
+
+---
+
+# 229. TITAN PRODUCT CONTROL PLANE API CHECKPOINT — 2026-09-27
+
+## Status
+
+The first operator-facing control-plane API is now implemented on top of the existing durable runtime.
+
+Implemented:
+
+~~~text
+[X] Global control-plane overview
+[X] Project control-plane listing
+[X] Project operator overview endpoint
+[X] Project state exposure
+[X] Task status aggregation
+[X] Workflow status aggregation
+[X] Agent summary
+[X] Artifact summary
+[X] Governance decision feed
+[X] Pending human-decision count
+[X] Pending task-approval count
+[X] Recent event feed
+[X] Explainability trace feed
+[X] Recovery metrics
+[X] Latest task-graph summary
+[X] Integration coverage
+~~~
+
+The new operator API is exposed under:
+
+~~~text
+/api/v1/control-plane
+~~~
+
+Primary endpoints:
+
+~~~text
+GET /api/v1/control-plane/overview
+GET /api/v1/control-plane/projects
+GET /api/v1/control-plane/projects/{project_id}
+~~~
+
+## Architectural boundary
+
+The API is intentionally read-oriented.
+
+It does not duplicate orchestration logic, recovery policy, governance policy or runtime execution. It aggregates durable control-plane state produced by the existing TITAN subsystems and exposes it as a stable surface for the Command Center.
+
+## Not yet implemented
+
+~~~text
+[ ] Next.js + TypeScript Command Center
+[ ] Live streaming / SSE operator updates
+[ ] Authentication and RBAC enforcement
+[ ] Operator mutation surface for approvals
+[ ] Operator mutation surface for recovery / rollback
+[ ] Paginated activity and artifact feeds
+[ ] Cross-project filtering and search
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN COMMAND CENTER MVP
+~~~
+
+The frontend will consume the control-plane API and expose:
+
+~~~text
+Projects
+  ↓
+Project Overview
+  ├── Objective / phase / autonomy
+  ├── Task & workflow state
+  ├── Active agents
+  ├── Artifacts
+  ├── Governance / approvals
+  ├── Recovery
+  ├── Explainability
+  └── Recent events
+~~~
+
+The Command Center remains a human control surface. Automated execution must remain governed by the existing policy, workflow and recovery boundaries.
+
+---
+
+# END OF PRODUCT CONTROL PLANE API CHECKPOINT
+
+
+---
+
+# 230. TITAN COMMAND CENTER MVP CHECKPOINT — 2026-09-27
+
+## Status
+
+The first read-oriented Command Center surface is now implemented against the Product Control Plane API.
+
+Implemented:
+
+~~~text
+[X] Next.js + TypeScript application shell
+[X] Global control-plane dashboard
+[X] Project list
+[X] Project detail view
+[X] Task/workflow status panels
+[X] Agent assignment panel
+[X] Governance / approval visibility
+[X] Recovery visibility
+[X] Explainability timeline
+[X] Recent events view
+[X] Artifact view
+[X] Server-side TITAN Core API integration
+[X] Local development environment template
+~~~
+
+Technology baseline:
+
+~~~text
+Next.js 16
+TypeScript
+React 19
+Server-side API consumption through TITAN_API_URL
+~~~
+
+The Command Center remains intentionally read-oriented in this milestone. It provides human visibility without introducing a second orchestration path.
+
+## Not yet implemented
+
+~~~text
+[ ] Authentication
+[ ] RBAC
+[ ] Live streaming / SSE
+[ ] Approval actions
+[ ] Recovery / rollback actions
+[ ] Task graph visual editor
+[ ] Agent management
+[ ] Artifact download / preview
+[ ] Cross-project search and filtering
+[ ] Frontend build CI
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN COMMAND CENTER INTERACTION + GOVERNED ACTIONS
+~~~
+
+The next layer should add:
+
+~~~text
+Human
+  ↓
+Command Center
+  ↓
+Authenticated API
+  ↓
+Policy / Permission Check
+  ↓
+Governed Action
+  ↓
+Workflow / Recovery Runtime
+  ↓
+Event + Explainability
+  ↓
+Command Center
+~~~
+
+---
+
+# END OF COMMAND CENTER MVP CHECKPOINT
+
+
+---
+
+# 231. TITAN COMMAND CENTER GOVERNED ACTIONS CHECKPOINT — 2026-09-27
+
+## Status
+
+The Command Center now has a first governed mutation path for operator-controlled recovery.
+
+Implemented:
+
+~~~text
+[X] Operator identity boundary
+[X] Configurable bearer-token authentication
+[X] Development-local operator mode
+[X] Recovery approval / rejection audit identity
+[X] Recovery rollback audit identity
+[X] Control-plane recovery action discovery
+[X] Command Center recovery action buttons
+[X] Server-side Next.js API proxy for operator actions
+[X] Integration coverage for pending governed actions
+[X] Unit coverage for operator authentication
+~~~
+
+Runtime path:
+
+~~~text
+Operator
+  ↓
+Command Center
+  ↓
+Next.js server proxy
+  ↓
+Bearer token
+  ↓
+TITAN FastAPI
+  ↓
+Operator authentication
+  ↓
+Existing recovery governance/runtime
+  ↓
+Durable event
+  ↓
+Explainability / control plane
+~~~
+
+## Security boundary
+
+The current implementation intentionally uses a configurable bearer token as the first operator API authentication adapter.
+
+Development:
+
+~~~text
+TITAN_ENV=development
+TITAN_OPERATOR_AUTH_REQUIRED=false
+~~~
+
+Production/staging should require:
+
+~~~text
+TITAN_OPERATOR_AUTH_REQUIRED=true
+TITAN_OPERATOR_API_TOKEN=<strong secret>
+~~~
+
+This is an interim operator credential boundary, not the final OIDC/RBAC implementation defined by the architecture.
+
+## Not yet implemented
+
+~~~text
+[ ] OIDC login
+[ ] user/session persistence
+[ ] fine-grained RBAC permissions
+[ ] approval records independent of recovery events
+[ ] task approval workflow
+[ ] Temporal-native human wait / resume
+[ ] live SSE updates
+[ ] authenticated frontend session
+[ ] CSRF strategy for browser sessions
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN IDENTITY + REAL-TIME CONTROL PLANE
+~~~
+
+The next layer should replace the interim operator token with OIDC-compatible identity and add live event streaming:
+
+~~~text
+Identity Provider
+      ↓
+User Session
+      ↓
+RBAC / Permissions
+      ↓
+Command Center
+      ↕
+SSE / Event Stream
+      ↕
+TITAN Event Log
+~~~
+
+---
+
+# END OF GOVERNED ACTIONS CHECKPOINT
+
+---
+
+# 232. TITAN IDENTITY + REAL-TIME CONTROL PLANE CHECKPOINT — 2026-09-28
+
+## Status
+
+The Command Center control plane now has an authenticated read boundary and a resumable event stream.
+
+Implemented:
+
+~~~text
+[X] Operator identity object
+[X] Role-scoped operator permissions
+[X] Viewer / operator / admin permission profiles
+[X] Authenticated Control Plane API in non-development environments
+[X] Operator identity introspection endpoint
+[X] Server-side Command Center authentication
+[X] Authenticated SSE event stream
+[X] Event cursor with timestamp + UUID ordering
+[X] Browser Last-Event-ID resume support
+[X] Next.js SSE proxy
+[X] Live Command Center event panel
+[X] Event stream unit coverage
+[X] Operator permission unit coverage
+~~~
+
+Control Plane runtime path:
+
+~~~text
+Identity
+  ↓
+Permission
+  ↓
+Control Plane API
+  ├── snapshots
+  ├── governed actions
+  └── event stream
+            ↓
+        Event Log
+            ↓
+      SSE / Last-Event-ID
+            ↓
+      Command Center
+~~~
+
+## Permission model
+
+~~~text
+viewer
+  └── control_plane:read
+
+operator
+  ├── control_plane:read
+  ├── recovery:approve
+  └── recovery:rollback
+
+admin
+  ├── control_plane:read
+  ├── recovery:approve
+  ├── recovery:rollback
+  └── policy:admin
+~~~
+
+This is the first concrete RBAC boundary. It is intentionally application-level and remains separate from the eventual OIDC identity provider.
+
+## Event stream contract
+
+Endpoint:
+
+~~~text
+GET /api/v1/control-plane/projects/{project_id}/events/stream
+~~~
+
+The stream emits:
+
+~~~text
+event: titan.event
+id: <timestamp>|<event-uuid>
+data: <JSON event envelope>
+~~~
+
+The cursor is durable enough to resume from the browser's last received event without relying on in-memory server state.
+
+The Next.js proxy consumes the browser's Last-Event-ID and forwards it to TITAN Core as the stream cursor.
+
+## Security boundary
+
+Non-development deployments require the configured operator bearer token.
+
+The Command Center never places the operator token in browser JavaScript. Server components and the Next.js server proxy attach it server-side.
+
+This remains an interim credential architecture. The long-term target remains:
+
+~~~text
+OIDC
+  ↓
+User Session
+  ↓
+RBAC
+  ↓
+Scoped Permissions
+~~~
+
+## Not yet implemented
+
+~~~text
+[ ] OIDC login
+[ ] Persistent user/session model
+[ ] Refresh token / session rotation strategy
+[ ] Fine-grained resource-level permissions
+[ ] Temporal-native human wait/resume
+[ ] Event filtering / server-side subscription filters
+[ ] Event retention / archival strategy
+[ ] Frontend optimistic state reconciliation
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN HUMAN-IN-THE-LOOP EXECUTION
+~~~
+
+The next layer should make human intervention a first-class workflow state rather than an external control-plane mutation:
+
+~~~text
+Task
+  ↓
+Governance
+  ↓
+WAITING_APPROVAL
+  ↓
+Human decision
+  ↓
+Resume / Reject / Expire
+  ↓
+Temporal execution
+  ↓
+Event Log
+  ↓
+Command Center
+~~~
+
+---
+
+# END OF IDENTITY + REAL-TIME CONTROL PLANE CHECKPOINT
+
+---
+
+# 233. TITAN HUMAN-IN-THE-LOOP EXECUTION CHECKPOINT — 2026-09-28
+
+## Status
+
+Human approval is now a first-class execution gate inside the Temporal workflow rather than only a control-plane annotation.
+
+Implemented:
+
+~~~text
+[X] Workflow approval-task contract
+[X] Risk-aware approval gate for R2/R3/R4 tasks
+[X] Explicit approval requirement support
+[X] WAITING_APPROVAL task state
+[X] Temporal approve_task signal
+[X] Temporal reject_task signal
+[X] Durable approval request event
+[X] Durable approval decision event
+[X] Operator approval/rejection API
+[X] Temporal workflow resume after approval
+[X] Workflow terminal rejection state
+[X] Command Center task approval panel
+[X] Server-side task approval proxy
+[X] Approval gate unit coverage
+[X] Direct workflow API path applies the same risk-aware approval gate
+[X] Configurable durable approval timeout
+[X] Explicit TASK / WORKFLOW approval-expiry events
+[X] Race-safe timeout handling when an operator decision arrives concurrently
+~~~
+
+Execution path:
+
+~~~text
+Task
+  ↓
+Risk / approval policy
+  ↓
+WAITING_APPROVAL
+  ↓
+Command Center
+  ↓
+Operator decision
+  ↓
+Temporal signal
+  ├── approve → execute task
+  └── reject  → REJECTED workflow
+  ↓
+Event Log
+  ↓
+Live Command Center
+~~~
+
+## Operator API
+
+Approval endpoint:
+
+~~~text
+POST /api/v1/projects/{project_id}/tasks/{task_id}/approval
+~~~
+
+Payload:
+
+~~~json
+{
+  "approved": true,
+  "reason": "Approved by operator"
+}
+~~~
+
+## Risk integration
+
+By default:
+
+~~~text
+R0 / R1 → may execute without a human gate
+R2 / R3 / R4 → Human-in-the-Loop gate
+Explicit approval_requirement != NONE → Human-in-the-Loop gate
+~~~
+
+These rules remain subject to future policy overrides and environment-specific governance.
+
+## Not yet implemented
+
+~~~text
+[X] Approval expiry / timeout
+[ ] Delegation to another operator
+[ ] Multi-person approval
+[ ] Approval quorum
+[ ] Policy-driven approval escalation
+[ ] OIDC identity attached to approval records
+[ ] Temporal query endpoint for waiting tasks
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN IDENTITY / OIDC + PRODUCTION SECURITY
+~~~
+
+The next layer should replace the interim static operator credential with a real identity/session boundary and secure production deployment practices.
+
+---
+
+# END OF HUMAN-IN-THE-LOOP EXECUTION CHECKPOINT
+
+# 234. TITAN IDENTITY / OIDC + PRODUCTION SECURITY CHECKPOINT — 2026-09-28
+
+## Status
+
+The backend now has a provider-agnostic OIDC authentication boundary for operator-facing APIs. OIDC bearer tokens are verified against trusted JWKS keys and validated for issuer, audience, expiration, issued-at time and subject. Operator roles are derived from a configurable claims path and mapped to TITAN viewer/operator/admin roles.
+
+Implemented:
+
+~~~text
+[X] OIDC operator authentication mode
+[X] JWKS signature validation with cached key material
+[X] Issuer validation
+[X] Audience validation
+[X] exp / iat / sub / iss / aud claim requirements
+[X] Configurable OIDC role claim mapping
+[X] Optional required TITAN scope
+[X] HTTPS enforcement for issuer and JWKS endpoints
+[X] Fail-closed JWKS retrieval errors
+[X] Persistent actor_subject audit field
+[X] Alembic migration 0007_operator_identity_audit
+[X] Operator identity propagation through Temporal task rejection signals
+[X] /control-plane/me identity metadata
+~~~
+
+## Authentication modes
+
+~~~text
+Development
+  ↓
+local development identity
+
+Production / controlled deployment
+  ↓
+OIDC bearer token
+  ↓
+JWT signature + issuer + audience + time validation
+  ↓
+role claim mapping
+  ↓
+TITAN permissions
+~~~
+
+The static operator token remains available as an explicit authentication mode. It is not selected automatically when OIDC mode is configured.
+
+## Audit rule
+
+Sensitive operator decisions persist the stable authenticated subject in events.actor_subject. TITAN never persists the bearer token or the complete OIDC claims object.
+
+## Current configuration
+
+~~~text
+TITAN_OPERATOR_AUTH_MODE=oidc
+TITAN_OIDC_ISSUER_URL=<issuer>
+TITAN_OIDC_AUDIENCE=<api audience>
+TITAN_OIDC_JWKS_URL=<jwks endpoint>
+TITAN_OIDC_ROLES_CLAIM=roles
+TITAN_OIDC_REQUIRED_SCOPE=<optional scope>
+~~~
+
+## Not yet implemented
+
+~~~text
+[ ] Browser OIDC login / authorization-code + PKCE session
+[ ] Persistent user/session model
+[ ] Refresh-token/session rotation
+[ ] Delegation to another operator
+[ ] Multi-person approval
+[ ] Approval quorum
+[ ] Policy-driven approval escalation
+[ ] Fine-grained resource-level permissions
+[ ] Temporal query endpoint for waiting tasks
+[ ] Event retention / archival strategy
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN SESSION + MULTI-OPERATOR GOVERNANCE
+~~~
+
+The next layer should establish a browser session boundary for the Command Center and extend single-operator approval into delegation, quorum and policy-driven escalation.
+
+---
+
+# 235. TITAN SESSION + MULTI-OPERATOR GOVERNANCE CHECKPOINT — 2026-09-29
+
+## Status
+
+TITAN now has a server-side browser session boundary and a durable multi-operator approval quorum.
+
+Implemented:
+
+~~~text
+[X] OIDC authorization-code flow
+[X] PKCE S256 challenge
+[X] state + nonce protection
+[X] Browser-bound OIDC state cookie
+[X] Server-side OIDC code exchange
+[X] Persistent operator user model
+[X] Opaque HttpOnly browser session cookie
+[X] Session expiration and revocation
+[X] Explicit session rotation endpoint
+[X] Next.js BFF authentication routes
+[X] Command Center sign-in / sign-out surface
+[X] Session cookie forwarding for API mutations and SSE
+[X] Durable task approval decision records
+[X] Distinct-operator approval quorum
+[X] Quorum progress in Control Plane and Command Center
+[X] Temporal wait condition based on approval quorum
+[X] Idempotent Temporal quorum signal from durable database count
+~~~
+
+## Browser authentication
+
+~~~text
+Command Center
+  ↓
+/api/auth/login
+  ↓
+TITAN OIDC start
+  ↓
+OIDC provider
+  ↓
+Authorization code + PKCE
+  ↓
+Next.js callback
+  ↓
+TITAN token exchange
+  ↓
+HttpOnly opaque session
+~~~
+
+The browser never receives the OIDC access token or ID token through JavaScript. TITAN stores only a hash of the opaque session token.
+
+## Multi-operator approval
+
+A task can now require more than one distinct operator subject.
+
+~~~text
+Task requires 2 approvals
+  ↓
+Operator A → APPROVE → 1 / 2
+  ↓
+Task remains WAITING_APPROVAL
+  ↓
+Operator B → APPROVE → 2 / 2
+  ↓
+Temporal resumes execution
+~~~
+
+The same operator cannot satisfy multiple quorum slots because approval decisions are unique by task + operator subject.
+
+## Not yet implemented
+
+~~~text
+[ ] Delegation to another operator
+[ ] Policy-driven approval escalation
+[ ] Fine-grained project/resource RBAC
+[ ] Refresh-token rotation with upstream provider
+[ ] Temporal query endpoint for approval state
+[ ] Event retention / archival strategy
+~~~
+
+## Next implementation phase
+
+~~~text
+TITAN DELEGATION + POLICY ESCALATION + RESOURCE RBAC
+~~~
+
+---

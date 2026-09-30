@@ -12,6 +12,8 @@ from titan.persistence.models import (
     WorkflowModel,
     task_dependencies,
 )
+from titan.runtime.approval_policy import resolve_task_approval_policy
+from titan.runtime.governance import task_requires_human_approval
 from titan.runtime.model_router import BudgetExceeded, ModelBudget, ModelSelectionRequest
 from titan.runtime.scheduler import DependencyAwareScheduler, TaskSchedulingProfile
 from titan.runtime.service import AgentRuntime
@@ -31,6 +33,15 @@ async def build_workflow_input(
 ) -> WorkflowInput:
     requested_ids = tuple(str(task.id) for task in tasks)
     requested_id_set = set(requested_ids)
+    tasks_by_id = {str(task.id): task for task in tasks}
+    approval_policies = {
+        task.id: await resolve_task_approval_policy(
+            session,
+            project_id=project.id,
+            task=task,
+        )
+        for task in tasks
+    }
 
     dependency_rows = list(
         await session.execute(
@@ -203,6 +214,28 @@ async def build_workflow_input(
         task_profiles=tuple(task_profiles),
         max_project_cost=settings.orchestration_max_cost,
         precompleted_task_ids=tuple(precompleted_task_ids),
+        approval_task_ids=tuple(
+            task_id
+            for task_id in requested_ids
+            if task_requires_human_approval(
+                risk_level=tasks_by_id[task_id].risk_level,
+                approval_requirement=tasks_by_id[task_id].approval_requirement,
+                approval_quorum=approval_policies[UUID(task_id)].quorum,
+            )
+        ),
+        approval_quorums=tuple(
+            (
+                task_id,
+                approval_policies[UUID(task_id)].quorum,
+            )
+            for task_id in requested_ids
+            if task_requires_human_approval(
+                risk_level=tasks_by_id[task_id].risk_level,
+                approval_requirement=tasks_by_id[task_id].approval_requirement,
+                approval_quorum=approval_policies[UUID(task_id)].quorum,
+            )
+        ),
+        approval_timeout_seconds=max(1, settings.human_approval_timeout_seconds),
         recovery_attempt=recovery_attempt,
         recovery_root_workflow_id=recovery_root_workflow_id,
     )

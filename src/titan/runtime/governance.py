@@ -172,3 +172,20 @@ class GovernanceEngine:
                 ),
             )
         )
+
+
+RISK_ORDER = {"R0": 0, "R1": 1, "R2": 2, "R3": 3, "R4": 4}
+
+
+def task_requires_human_approval(
+    *,
+    risk_level: str,
+    approval_requirement: str,
+    approval_quorum: int = 1,
+) -> bool:
+    """Return whether a task must pass the Human-in-the-Loop gate."""
+    if approval_quorum > 1:
+        return True
+    if approval_requirement not in {"", "NONE"}:
+        return True
+    return RISK_ORDER.get(risk_level, 0) >= RISK_ORDER["R2"]

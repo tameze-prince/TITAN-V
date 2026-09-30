@@ -113,6 +113,7 @@ class TaskPlanNode(BaseModel):
     agent_name: str = Field(min_length=1, max_length=120)
     risk_level: str = Field(default="R1", pattern=r"^R[0-4]$")
     approval_requirement: str = "NONE"
+    approval_quorum: int = Field(default=1, ge=1, le=10)
     position: int = Field(ge=0)
 
 

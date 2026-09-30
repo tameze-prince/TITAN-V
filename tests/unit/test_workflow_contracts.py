@@ -20,3 +20,18 @@ def test_workflow_result_defaults_to_empty_tasks() -> None:
 
     assert value.completed_task_ids == ()
     assert value.run_id is None
+
+
+def test_workflow_input_carries_human_approval_gate_tasks() -> None:
+    task_id = str(uuid4())
+    value = WorkflowInput(
+        workflow_id=str(uuid4()),
+        project_id=str(uuid4()),
+        task_ids=(task_id,),
+        approval_task_ids=(task_id,),
+        approval_quorums=((task_id, 2),),
+    )
+
+    assert value.approval_task_ids == (task_id,)
+    assert value.approval_quorums == ((task_id, 2),)
+    assert value.approval_timeout_seconds == 86_400
