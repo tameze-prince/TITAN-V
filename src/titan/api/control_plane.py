@@ -10,7 +10,10 @@ from titan.persistence.database import get_session
 from titan.persistence.models import (
     AgentModel,
     ArtifactModel,
+    EvaluationModel,
+    EvidenceModel,
     EventModel,
+    RepairAttemptModel,
     GovernanceDecisionModel,
     ProjectModel,
     ProjectStateModel,
@@ -134,6 +137,53 @@ class TaskGraphSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EvaluationSummary(BaseModel):
+    id: UUID
+    task_id: UUID | None
+    run_id: UUID | None
+    artifact_id: UUID | None
+    evaluator_type: str
+    evaluator_version: str
+    producer_agent: str | None
+    independent: bool
+    decision: str
+    status: str
+    score: float | None
+    confidence: float
+    repair_attempt: int
+    criteria: dict
+    created_at: datetime
+    completed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class RepairAttemptSummary(BaseModel):
+    id: UUID
+    evaluation_id: UUID
+    task_id: UUID | None
+    attempt: int
+    max_attempts: int
+    diagnosis: str
+    corrective_action: str
+    status: str
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class QualitySummary(BaseModel):
+    evaluation_count: int
+    passed_count: int
+    failed_count: int
+    evidence_count: int
+    repair_attempt_count: int
+    latest_score: float | None
+    latest_decision: str | None
+
+
 class ProjectSummary(BaseModel):
     id: UUID
     name: str
@@ -187,6 +237,9 @@ class ProjectOverviewResponse(BaseModel):
     explainability: list[dict]
     recovery: dict
     latest_task_graph: TaskGraphSummary | None
+    evaluations: list[EvaluationSummary]
+    repair_attempts: list[RepairAttemptSummary]
+    quality: QualitySummary
 
 
 class ControlPlaneOverviewResponse(BaseModel):
@@ -357,6 +410,41 @@ async def get_project_control_plane(
             .order_by(ArtifactModel.created_at.desc())
             .limit(25)
         )
+    )
+
+    evaluations = list(
+        await session.scalars(
+            select(EvaluationModel)
+            .where(EvaluationModel.project_id == project_id)
+            .order_by(EvaluationModel.created_at.desc())
+            .limit(25)
+        )
+    )
+    evidence_count = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(EvidenceModel)
+            .where(EvidenceModel.project_id == project_id)
+        )
+        or 0
+    )
+    repair_attempts = list(
+        await session.scalars(
+            select(RepairAttemptModel)
+            .join(EvaluationModel, RepairAttemptModel.evaluation_id == EvaluationModel.id)
+            .where(EvaluationModel.project_id == project_id)
+            .order_by(RepairAttemptModel.created_at.desc())
+            .limit(25)
+        )
+    )
+    quality = QualitySummary(
+        evaluation_count=len(evaluations),
+        passed_count=sum(1 for item in evaluations if item.decision == "PASS"),
+        failed_count=sum(1 for item in evaluations if item.decision == "FAIL"),
+        evidence_count=evidence_count,
+        repair_attempt_count=len(repair_attempts),
+        latest_score=evaluations[0].score if evaluations else None,
+        latest_decision=evaluations[0].decision if evaluations else None,
     )
 
     governance_decisions = list(
@@ -603,4 +691,7 @@ async def get_project_control_plane(
             "strategy_counts": recovery.strategy_counts,
         },
         latest_task_graph=latest_task_graph,
+        evaluations=[EvaluationSummary.model_validate(item) for item in evaluations],
+        repair_attempts=[RepairAttemptSummary.model_validate(item) for item in repair_attempts],
+        quality=quality,
     )
