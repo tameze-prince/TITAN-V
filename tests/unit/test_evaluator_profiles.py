@@ -164,3 +164,22 @@ def engine_check(name: str, passed: bool, weight: float):
         weight=weight,
         required=True,
     )
+
+
+def test_explicit_model_fail_cannot_be_promoted_to_pass() -> None:
+    engine = EvaluationEngine()
+    profile = model_profile()
+    result = engine.evaluate(
+        profile=profile,
+        checks=(
+            engine_check("correctness", True, 2.0),
+            engine_check("evidence", True, 1.0),
+        ),
+        evaluator_type="MODEL_INDEPENDENT",
+        independent=True,
+        confidence=0.99,
+        decision="FAIL",
+    )
+
+    assert result.passed is False
+    assert result.decision == "FAIL"
