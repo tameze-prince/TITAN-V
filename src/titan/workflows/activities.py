@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from temporalio import activity
 
+from titan.config import settings
 from titan.persistence.database import SessionFactory
 from titan.persistence.models import (
     ArtifactModel,
@@ -21,7 +22,7 @@ from titan.persistence.models import (
     task_dependencies,
 )
 from titan.runtime.contracts import AgentTaskContext
-from titan.runtime.evaluation_service import EvaluationCheck, EvaluationEngine
+from titan.runtime.evaluation_service import EvaluationEngine
 from titan.runtime.governance import GovernanceEngine
 from titan.runtime.governance_audit import record_governance_decision
 from titan.runtime.memory import MemoryStore
