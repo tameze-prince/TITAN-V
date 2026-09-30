@@ -76,7 +76,7 @@ class EvaluationProfileResponse(BaseModel):
     min_confidence: float
     created_by: str
     activated_at: datetime | None
-    criteria: list[EvaluationCriterionResponse]
+    criteria: list[EvaluationCriterionResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
