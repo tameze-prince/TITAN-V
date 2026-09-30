@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from titan.config import settings
 from titan.persistence.database import get_session
 from titan.persistence.models import (
     EvaluationCriterionModel,
@@ -211,6 +212,11 @@ async def list_operator_notifications(
     operator: OperatorIdentity = Depends(require_operator),
 ) -> list[OperatorNotificationResponse]:
     operator.require_permission("control_plane:read")
+    if project_id is None and settings.resource_rbac_required and operator.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Project scope is required when resource RBAC is enforced",
+        )
     query = (
         select(OperatorNotificationModel)
         .order_by(OperatorNotificationModel.created_at.desc())
