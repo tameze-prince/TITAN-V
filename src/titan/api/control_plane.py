@@ -12,6 +12,7 @@ from titan.persistence.models import (
     ArtifactModel,
     EvaluationModel,
     EvidenceModel,
+    OperatorNotificationModel,
     EventModel,
     RepairAttemptModel,
     GovernanceDecisionModel,
@@ -180,6 +181,7 @@ class QualitySummary(BaseModel):
     failed_count: int
     evidence_count: int
     repair_attempt_count: int
+    unread_notification_count: int
     latest_score: float | None
     latest_decision: str | None
 
@@ -437,12 +439,24 @@ async def get_project_control_plane(
             .limit(25)
         )
     )
+    unread_notification_count = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(OperatorNotificationModel)
+            .where(
+                OperatorNotificationModel.project_id == project_id,
+                OperatorNotificationModel.status == "UNREAD",
+            )
+        )
+        or 0
+    )
     quality = QualitySummary(
         evaluation_count=len(evaluations),
         passed_count=sum(1 for item in evaluations if item.decision == "PASS"),
         failed_count=sum(1 for item in evaluations if item.decision == "FAIL"),
         evidence_count=evidence_count,
         repair_attempt_count=len(repair_attempts),
+        unread_notification_count=unread_notification_count,
         latest_score=evaluations[0].score if evaluations else None,
         latest_decision=evaluations[0].decision if evaluations else None,
     )
