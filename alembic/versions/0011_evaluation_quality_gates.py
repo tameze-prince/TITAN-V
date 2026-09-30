@@ -80,7 +80,6 @@ def downgrade() -> None:
     op.drop_constraint("evaluation_confidence_range", "evaluations", type_="check")
     op.drop_column("evaluations", "repair_attempt")
     op.drop_column("evaluations", "confidence")
-    op.drop_column("decision", "independent") if False else None
     op.drop_column("evaluations", "independent")
     op.drop_column("evaluations", "producer_agent")
     op.drop_column("evaluations", "evaluator_version")
