@@ -631,6 +631,12 @@ class MemoryItemModel(Base):
 
 class EvidenceModel(Base):
     __tablename__ = "evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="evidence_confidence_range",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
@@ -638,6 +644,12 @@ class EvidenceModel(Base):
     )
     task_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
+    )
+    evaluation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("evaluations.id", ondelete="CASCADE"), nullable=True
+    )
+    artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("artifacts.id", ondelete="SET NULL"), nullable=True
     )
     evidence_type: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -658,6 +670,20 @@ class EvidenceModel(Base):
 
 class EvaluationModel(Base):
     __tablename__ = "evaluations"
+    __table_args__ = (
+        CheckConstraint(
+            "score IS NULL OR (score >= 0 AND score <= 1)",
+            name="evaluation_score_range",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="evaluation_confidence_range",
+        ),
+        CheckConstraint(
+            "repair_attempt >= 0",
+            name="evaluation_repair_attempt_range",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
@@ -669,11 +695,30 @@ class EvaluationModel(Base):
     run_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), nullable=True
     )
+    artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("artifacts.id", ondelete="SET NULL"), nullable=True
+    )
     evaluator_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    evaluator_version: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="1.0", server_default="1.0"
+    )
+    producer_agent: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    independent: Mapped[bool] = mapped_column(
+        nullable=False, default=True, server_default="true"
+    )
+    decision: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="NEEDS_REVIEW", server_default="NEEDS_REVIEW"
+    )
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="PENDING", server_default="PENDING"
     )
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence: Mapped[float] = mapped_column(
+        Float, nullable=False, default=1.0, server_default="1.0"
+    )
+    repair_attempt: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     criteria: Mapped[dict] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
@@ -688,6 +733,16 @@ class EvaluationModel(Base):
 
 class RepairAttemptModel(Base):
     __tablename__ = "repair_attempts"
+    __table_args__ = (
+        CheckConstraint(
+            "attempt > 0",
+            name="repair_attempt_range",
+        ),
+        CheckConstraint(
+            "max_attempts > 0",
+            name="repair_max_attempts_range",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     evaluation_id: Mapped[uuid.UUID] = mapped_column(
@@ -697,6 +752,9 @@ class RepairAttemptModel(Base):
         UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
     )
     attempt: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=2, server_default="2"
+    )
     diagnosis: Mapped[str] = mapped_column(Text, nullable=False)
     corrective_action: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(
@@ -705,8 +763,8 @@ class RepairAttemptModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
 
 
 class IntentRecordModel(Base):
