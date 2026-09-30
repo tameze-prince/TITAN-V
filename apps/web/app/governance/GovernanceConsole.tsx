@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 
 import type {
   EvaluationProfile,
@@ -107,7 +107,7 @@ export function GovernanceConsole({
     }
   }
 
-  async function createProfile(event: React.FormEvent<HTMLFormElement>) {
+  async function createProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canAdmin) return;
 
