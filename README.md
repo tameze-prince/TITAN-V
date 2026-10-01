@@ -18,3 +18,8 @@ Operator authentication now supports provider-agnostic OIDC bearer-token validat
 ### Governance Command Center
 
 The web Command Center now exposes `/governance` for authenticated operators. Administrators can create and activate versioned evaluator profiles; operators can inspect scoped profiles and acknowledge durable human-escalation notifications subject to resource RBAC.
+
+
+## CI validation
+
+The repository CI workflow in `.github/workflows/ci.yml` validates database migrations, Ruff linting, the full pytest suite, and the PostgreSQL/Temporal integration environment on pushes and pull requests.
