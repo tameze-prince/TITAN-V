@@ -1,6 +1,6 @@
 """add versioned evaluator profiles, criteria and operator notifications
 
-Revision ID: 0012_evaluator_profiles_notifications
+Revision ID: 0012_evaluator_profiles_notify
 Revises: 0011_evaluation_quality_gates
 Create Date: 2026-09-30
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "0012_evaluator_profiles_notifications"
+revision = "0012_evaluator_profiles_notify"
 down_revision = "0011_evaluation_quality_gates"
 branch_labels = None
 depends_on = None
