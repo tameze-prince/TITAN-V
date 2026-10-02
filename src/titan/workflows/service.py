@@ -241,7 +241,7 @@ async def build_workflow_input(
         recovery_root_workflow_id=recovery_root_workflow_id,
     )
 
-    schedule = DependencyAwareScheduler().build(
+    DependencyAwareScheduler().build(
         requested_ids,
         tuple(
             (task_id, tuple(sorted(dependency_map[task_id])))
