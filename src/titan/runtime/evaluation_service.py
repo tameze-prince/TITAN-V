@@ -215,7 +215,7 @@ class EvaluationEngine:
                     ),
                     EvaluationJudgeOutput,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 return self.evaluate(
                     profile=profile,
                     checks=(
