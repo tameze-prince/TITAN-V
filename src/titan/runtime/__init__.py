@@ -34,7 +34,6 @@ __all__ = [
     "CapabilityResolver",
     "DependencyAwareScheduler",
     "EvaluationEngine",
-    "get_agent_runtime",
     "GovernanceAction",
     "GovernanceCheck",
     "GovernanceDecision",
@@ -55,4 +54,5 @@ __all__ = [
     "TaskSchedulingProfile",
     "Workspace",
     "WorkspaceManager",
+    "get_agent_runtime",
 ]
