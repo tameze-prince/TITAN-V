@@ -1,6 +1,7 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Iterable
+from typing import ClassVar
 
 
 class FailureCategory(StrEnum):
@@ -53,7 +54,7 @@ def classify_failure(error_message: str) -> FailureCategory:
 class RecoveryStrategySelector:
     """Deterministically learn a bounded recovery strategy from durable outcomes."""
 
-    _DEFAULT_SCORES = {
+    _DEFAULT_SCORES: ClassVar[dict[RecoveryStrategy, float]] = {
         RecoveryStrategy.REPLAN_REASSIGN: 0.50,
         RecoveryStrategy.REPLAN_SAME_AGENT: 0.45,
     }
