@@ -78,9 +78,12 @@ async def build_project_explainability_trace(
         payload = event.payload or {}
         if workflow_id is not None:
             linked_workflow = payload.get("workflow_id") or payload.get("run_id")
-            if linked_workflow is not None and str(linked_workflow) != str(workflow_id):
-                if event.aggregate_id != workflow_id:
-                    continue
+            if (
+                linked_workflow is not None
+                and str(linked_workflow) != str(workflow_id)
+                and event.aggregate_id != workflow_id
+            ):
+                continue
 
         steps.append(
             ExplainabilityStep(
