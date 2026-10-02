@@ -23,7 +23,6 @@ from titan.runtime.session import (
     new_nonce,
     new_state_token,
     oidc_authorization_url,
-    revoke_operator_session,
     sha256,
     upsert_operator_user,
 )
