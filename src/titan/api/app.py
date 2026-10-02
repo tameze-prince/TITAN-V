@@ -272,6 +272,18 @@ class ReplanResponse(BaseModel):
 
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    await close_database()
+
+
+app = FastAPI(title="TITAN V.", version=__version__, lifespan=lifespan)
+app.include_router(auth_router)
+app.include_router(authorization_router)
+app.include_router(control_plane_router)
+app.include_router(evaluation_router)
+
 @app.post(
     "/api/v1/policies",
     status_code=status.HTTP_201_CREATED,
@@ -453,18 +465,6 @@ class RecoveryMetricsResponse(BaseModel):
     latest_outcome: str | None
     strategy_counts: dict[str, int]
 
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    yield
-    await close_database()
-
-
-app = FastAPI(title="TITAN V.", version=__version__, lifespan=lifespan)
-app.include_router(auth_router)
-app.include_router(authorization_router)
-app.include_router(control_plane_router)
-app.include_router(evaluation_router)
 
 
 @app.get("/health")
