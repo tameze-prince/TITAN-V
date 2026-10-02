@@ -506,66 +506,6 @@ async def orchestrate_task(
                     plan=plan,
                 )
 
-            if latest_repair is not None and latest_repair.status == "STARTED":
-                    latest_repair.status = "FAILED"
-                    latest_repair.completed_at = datetime.now(UTC)
-
-                if final_attempt:
-                    task.status = "FAILED"
-                    session.add(
-                        EventModel(
-                            project_id=task.project_id,
-                            type="TaskFailed",
-                            actor_type="SYSTEM",
-                            aggregate_type="TASK",
-                            aggregate_id=task.id,
-                            payload={
-                                "run_id": run_id,
-                                "reason": "Quality gate failed after bounded self-repair",
-                                "evaluation_id": str(evaluation.id),
-                                "attempt": current_attempt,
-                                "max_attempts": settings.repair_max_attempts,
-                            },
-                        )
-                    )
-                    await session.commit()
-                    raise AgentEvaluationFailure(
-                        evaluation=failed_report,
-                        plan=plan,
-                    )
-
-                repair = await evaluation_engine.plan_repair(
-                    session,
-                    evaluation_id=evaluation.id,
-                    task_id=task.id,
-                    attempt=current_attempt,
-                    diagnosis=plan.diagnosis,
-                    corrective_action=plan.corrective_action,
-                    max_attempts=settings.repair_max_attempts,
-                )
-                task.status = "REPAIRING"
-                session.add(
-                    EventModel(
-                        project_id=task.project_id,
-                        type="RepairPlanned",
-                        actor_type="SYSTEM",
-                        aggregate_type="TASK",
-                        aggregate_id=task.id,
-                        payload={
-                            "run_id": run_id,
-                            "repair_attempt": repair.attempt,
-                            "max_attempts": repair.max_attempts,
-                            "evaluation_id": str(evaluation.id),
-                            "diagnosis": repair.diagnosis,
-                            "corrective_action": repair.corrective_action,
-                        },
-                    )
-                )
-                await session.commit()
-                raise AgentEvaluationFailure(
-                    evaluation=failed_report,
-                    plan=plan,
-                )
 
             if latest_repair is not None and latest_repair.status == "STARTED":
                 latest_repair.status = "COMPLETED"
