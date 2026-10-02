@@ -10,6 +10,7 @@ from titan.workflows.activities import (
     mark_workflow_failed,
     mark_workflow_started,
     attempt_automatic_recovery,
+    mark_workflow_approval_expired,
     orchestrate_task,
 )
 from titan.workflows.runtime import TitanWorkflow
