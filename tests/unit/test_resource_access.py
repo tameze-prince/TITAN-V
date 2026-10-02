@@ -1,7 +1,6 @@
 import pytest
 
 from titan.config import settings
-from titan.persistence.models import OperatorResourceGrantModel
 from titan.runtime.operator_auth import OperatorIdentity
 from titan.runtime.resource_access import role_at_least
 
