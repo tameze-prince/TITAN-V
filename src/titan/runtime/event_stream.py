@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from titan.persistence.database import SessionFactory
 from titan.persistence.models import EventModel, ProjectModel
-from titan.runtime.operator_auth import OperatorIdentity, require_operator
+from titan.runtime.operator_auth import OperatorIdentity
 
 
 def _cursor_value(event: EventModel) -> str:
