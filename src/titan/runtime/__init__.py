@@ -28,12 +28,13 @@ from titan.runtime.scheduler import (
 )
 
 __all__ = [
+    "AdaptiveReplanner",
     "AgentRuntime",
     "CapabilityResolutionError",
     "CapabilityResolver",
     "DependencyAwareScheduler",
-    "AdaptiveReplanner",
     "EvaluationEngine",
+    "get_agent_runtime",
     "GovernanceAction",
     "GovernanceCheck",
     "GovernanceDecision",
@@ -41,6 +42,8 @@ __all__ = [
     "IntentCompiler",
     "IntentRepresentation",
     "MemoryStore",
+    "Reassignment",
+    "ReplanDecision",
     "TaskGraphPlan",
     "TaskGraphPlanner",
     "TaskPlanNode",
@@ -49,10 +52,7 @@ __all__ = [
     "TaskScheduleCycleError",
     "TaskScheduleError",
     "TaskScheduleProviderError",
-    "Reassignment",
-    "ReplanDecision",
     "TaskSchedulingProfile",
     "Workspace",
     "WorkspaceManager",
-    "get_agent_runtime",
 ]
