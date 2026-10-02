@@ -1366,7 +1366,7 @@ async def attempt_automatic_recovery(
             )
             await session.commit()
             return f"STARTED:{result.replacement_workflow_id}"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             await session.rollback()
             session.add(
                 EventModel(
