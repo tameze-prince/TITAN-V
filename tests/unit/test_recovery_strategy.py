@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from titan.runtime.recovery_strategy import (
     FailureCategory,
     RecoveryObservation,
@@ -111,7 +113,7 @@ def test_selector_penalizes_expensive_and_slow_recovery_strategies() -> None:
 def test_observation_event_parser_reads_strategy_cost_and_duration() -> None:
     class Event:
         type = "RecoveryResolved"
-        payload = {
+        payload: ClassVar[dict] = {
             "failure_category": "BUDGET",
             "strategy": "REPLAN_REASSIGN",
             "actual_cost": 1.25,
