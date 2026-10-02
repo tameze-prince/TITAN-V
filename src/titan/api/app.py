@@ -743,6 +743,14 @@ async def create_task_graph_plan(
     )
     await session.commit()
 
+    approval_policies = {
+        str(task.id): await resolve_task_approval_policy(
+            session,
+            project_id=project_id,
+            task=task,
+        )
+        for task in tasks
+    }
     node_by_key = {node.key: node for node in plan.nodes}
     response_tasks = []
     for task in sorted(tasks, key=lambda item: item.position):
@@ -1153,7 +1161,7 @@ async def rollback_recovery(
         try:
             handle = temporal_client.get_workflow_handle(workflow.temporal_workflow_id)
             await handle.cancel()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
     workflow.status = "ROLLED_BACK"
