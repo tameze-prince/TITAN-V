@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 
 import pytest
 
@@ -182,7 +184,7 @@ async def test_task_approval_policy_escalates_role_after_wait(monkeypatch) -> No
     )()
 
     class FakePolicy:
-        definition_json = {
+        definition_json: ClassVar[dict] = {
             "task_approval_quorum": 2,
             "task_approval_min_role": "operator",
             "task_approval_escalation_role": "admin",
