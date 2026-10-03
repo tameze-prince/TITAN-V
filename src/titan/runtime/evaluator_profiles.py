@@ -27,6 +27,7 @@ class EvaluationProfile:
     evaluator_model: str | None
     min_score: float
     min_confidence: float
+    system_prompt: str | None = None
     criteria: tuple[EvaluationCriterion, ...]
 
 
@@ -120,6 +121,7 @@ async def resolve_active_profile(
         evaluator_model=row.evaluator_model,
         min_score=row.min_score,
         min_confidence=row.min_confidence,
+        system_prompt=row.system_prompt,
         criteria=tuple(
             EvaluationCriterion(
                 key=item.key,
