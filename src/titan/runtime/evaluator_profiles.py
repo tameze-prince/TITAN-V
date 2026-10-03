@@ -27,8 +27,8 @@ class EvaluationProfile:
     evaluator_model: str | None
     min_score: float
     min_confidence: float
-    system_prompt: str | None = None
     criteria: tuple[EvaluationCriterion, ...]
+    system_prompt: str | None = None
 
 
 DEFAULT_PROFILE = EvaluationProfile(
