@@ -48,4 +48,14 @@ def build_default_capability_registry() -> CapabilityRegistry:
             risk_level="R1",
         )
     )
+    registry.register(
+        CapabilityDefinition(
+            name="software-engineering",
+            description=(
+                "Implement, modify, test, and execute software within an isolated "
+                "project workspace."
+            ),
+            risk_level="R2",
+        )
+    )
     return registry
