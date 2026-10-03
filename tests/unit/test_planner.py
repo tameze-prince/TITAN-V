@@ -66,9 +66,11 @@ def test_task_graph_planner_builds_a_dag_with_assignments() -> None:
     assert plan.version == 1
     assert plan.nodes
     assert len({node.key for node in plan.nodes}) == len(plan.nodes)
-    assert {node.agent_name for node in plan.nodes} == {"general-executor"}
+    assert "engineering-executor" in {node.agent_name for node in plan.nodes}
 
     deliverable = next(node for node in plan.nodes if node.key == "deliverable-1")
+    assert deliverable.agent_name == "engineering-executor"
+    assert deliverable.risk_level == "R2"
     research_keys = {
         node.key for node in plan.nodes if node.key.startswith("research-")
     }
