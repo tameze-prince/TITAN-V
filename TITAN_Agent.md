@@ -11146,3 +11146,57 @@ TITAN EVIDENCE + EVALUATION + SELF-REPAIR
 - Operator notifications can be listed and acknowledged only with authenticated project access.
 - The UI preserves the backend as the authorization source of truth; Next.js BFF routes never expose operator secrets to browser JavaScript.
 - Temporal execution retry capacity now follows the configured repair budget passed through WorkflowInput.
+
+# 240. TITAN FIRST REAL-PROJECT VERTICAL SLICE CHECKPOINT — 2026-10-03
+
+## Status
+
+TITAN now begins the first real-project validation phase. The objective is to validate the complete path from a software-oriented intent through risk-aware planning, engineering-agent execution, governed sandbox tooling, durable workspace changes, test execution, and result evaluation.
+
+## Engineering capability
+
+A dedicated `software-engineering` capability is registered at risk level `R2`.
+
+Software-oriented local intent compilation recognizes common engineering markers and requests this capability. The planner propagates the maximum capability risk into deliverable and synthesis tasks.
+
+When software engineering is required, the planner selects an agent whose risk ceiling can execute the task. The built-in engineering agent therefore runs these tasks at `R2`, allowing the existing `sandbox.exec` tool to execute without bypassing the runtime risk policy.
+
+## Real-provider validation harness
+
+An opt-in test now exists at:
+
+`tests/e2e/test_real_project_execution.py`
+
+It is deliberately excluded from ordinary CI because it requires an external model credential and validates real model behavior.
+
+The smoke scenario requires the engineering agent to:
+
+1. create a real Python workspace project;
+2. create `app.py` and `test_app.py`;
+3. use `sandbox.exec` instead of merely describing code;
+4. run the test suite;
+5. return a completed result with a tool trace;
+6. pass a second independent sandbox verification command.
+
+The harness fails when files are missing, the sandbox was not used, or the verification test command fails.
+
+## Acceptance boundary
+
+This checkpoint is not considered production validation.
+
+A successful run demonstrates only that TITAN can execute one controlled real-model engineering vertical slice. The next validation stages must cover:
+
+- multi-task projects;
+- repository modification;
+- failed tests and repair;
+- evaluator failure and escalation;
+- recovery;
+- human approval;
+- project-level artifact lineage;
+- cost and latency measurement.
+
+## Next phase
+
+**TITAN REAL-PROJECT VALIDATION BATCH 1**
+
+
