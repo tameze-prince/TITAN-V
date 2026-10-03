@@ -392,7 +392,7 @@ class EvaluationEngine:
         attempt: int,
         diagnosis: str,
         corrective_action: str,
-        max_attempts: int,
+        max_attempts: int = 2,
     ) -> RepairAttemptModel:
         if attempt < 1:
             raise ValueError("Repair attempt must be positive")
