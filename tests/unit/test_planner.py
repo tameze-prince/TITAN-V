@@ -90,3 +90,21 @@ def test_agent_contract_registry_exposes_deterministic_contracts() -> None:
     assert names == sorted(names)
     assert "engineering-executor" in names
     assert "general-executor" in names
+
+
+
+def test_software_intent_selects_r2_engineering_execution() -> None:
+    runtime_contracts = AgentContractRegistry(
+        (GENERAL_AGENT, ENGINEERING_AGENT)
+    ).all()
+    planner = TaskGraphPlanner(
+        build_default_capability_registry(),
+        runtime_contracts,
+    )
+
+    plan = planner.plan(local_compile_intent("Build and test a Python API."))
+
+    deliverable = next(node for node in plan.nodes if node.key == "deliverable-1")
+    assert "software-engineering" in deliverable.required_capabilities
+    assert deliverable.agent_name == "engineering-executor"
+    assert deliverable.risk_level == "R2"
