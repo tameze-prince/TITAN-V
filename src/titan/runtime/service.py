@@ -35,7 +35,12 @@ ENGINEERING_AGENT = AgentContract(
         "Inspect the assigned engineering task, use only explicitly allowed tools, "
         "and return structured evidence of the work performed."
     ),
-    capabilities=("analysis", "structured-output", "artifact-write"),
+    capabilities=(
+        "analysis",
+        "structured-output",
+        "artifact-write",
+        "software-engineering",
+    ),
     allowed_tools=("workspace.list", "workspace.read_text", "sandbox.exec"),
     risk_ceiling="R2",
     max_concurrency=settings.engineering_agent_max_concurrency,
