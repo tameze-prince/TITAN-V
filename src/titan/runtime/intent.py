@@ -69,6 +69,30 @@ class IntentCompiler:
 
 def local_compile_intent(raw_intent: str) -> IntentRepresentation:
     cleaned = raw_intent.strip()
+    normalized = cleaned.lower()
+    engineering_markers = (
+        "build",
+        "create",
+        "develop",
+        "implement",
+        "code",
+        "coding",
+        "software",
+        "application",
+        "app",
+        "api",
+        "backend",
+        "frontend",
+        "repository",
+        "repo",
+        "bug",
+        "fix",
+        "test",
+    )
+    required_capabilities = ["analysis", "structured-output"]
+    if any(marker in normalized for marker in engineering_markers):
+        required_capabilities.append("software-engineering")
+
     return IntentRepresentation(
         problem=cleaned[:500],
         desired_outcome=cleaned,
@@ -76,5 +100,5 @@ def local_compile_intent(raw_intent: str) -> IntentRepresentation:
         assumptions=["The raw request describes the desired outcome at a high level."],
         research_questions=["Who are the target users?", "What constraints must the solution satisfy?"],
         candidate_deliverables=[cleaned],
-        required_capabilities=["analysis", "structured-output"],
+        required_capabilities=required_capabilities,
     )
