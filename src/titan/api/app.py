@@ -1740,6 +1740,15 @@ async def create_and_start_workflow(
             )
         dependency_map[str(task_id)].append(dependency_str)
 
+    dependency_edges = tuple(
+        (
+            task_id,
+            tuple(sorted(dependencies)),
+        )
+        for task_id, dependencies in dependency_map.items()
+        if dependencies
+    )
+
     history_rows = list(
         await session.scalars(
             select(EventModel)
@@ -1904,13 +1913,7 @@ async def create_and_start_workflow(
         workflow_id=str(workflow.id),
         project_id=str(project_id),
         task_ids=requested_ids,
-        dependencies=tuple(
-            (
-                task_id,
-                tuple(sorted(dependency_map[task_id])),
-            )
-            for task_id in requested_ids
-        ),
+        dependencies=dependency_edges,
         task_agents=tuple(task_agents),
         agent_capacities=tuple(sorted(used_agents.items())),
         task_profiles=tuple(task_profiles),
@@ -1941,13 +1944,7 @@ async def create_and_start_workflow(
     try:
         preflight_schedule = DependencyAwareScheduler().build(
             requested_ids,
-            tuple(
-                (
-                    task_id,
-                    tuple(sorted(dependency_map[task_id])),
-                )
-                for task_id in requested_ids
-            ),
+            dependency_edges,
             task_agents=tuple(task_agents),
             agent_capacities=tuple(sorted(used_agents.items())),
             task_profiles=tuple(
