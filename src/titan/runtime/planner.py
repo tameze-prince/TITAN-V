@@ -180,10 +180,11 @@ class TaskGraphPlanner:
             base_capabilities,
             ("artifact-write",),
         )
+        deliverable_risk = self._risk_for_capabilities(deliverable_capabilities)
         for index, deliverable in enumerate(deliverables):
             agent = self.capability_resolver.choose_agent(
                 deliverable_capabilities,
-                risk_level="R1",
+                risk_level=deliverable_risk,
             )
             nodes.append(
                 TaskPlanNode(
@@ -194,7 +195,7 @@ class TaskGraphPlanner:
                     dependencies=research_keys,
                     agent_name=agent.name,
                     position=len(nodes),
-                    risk_level="R1",
+                    risk_level=deliverable_risk,
                 )
             )
 
@@ -203,9 +204,10 @@ class TaskGraphPlanner:
                 base_capabilities,
                 ("artifact-write",),
             )
+            synthesis_risk = self._risk_for_capabilities(synthesis_capabilities)
             agent = self.capability_resolver.choose_agent(
                 synthesis_capabilities,
-                risk_level="R1",
+                risk_level=synthesis_risk,
             )
             nodes.append(
                 TaskPlanNode(
@@ -219,7 +221,7 @@ class TaskGraphPlanner:
                     dependencies=tuple(node.key for node in nodes),
                     agent_name=agent.name,
                     position=len(nodes),
-                    risk_level="R1",
+                    risk_level=synthesis_risk,
                 )
             )
 
@@ -255,6 +257,9 @@ class TaskGraphPlanner:
     @staticmethod
     def _ensure_analysis_capability(capabilities: tuple[str, ...]) -> tuple[str, ...]:
         return TaskGraphPlanner._ensure_capabilities(capabilities, ("analysis",))
+
+    def _risk_for_capabilities(self, capabilities: tuple[str, ...]) -> str:
+        return self.capability_resolver.resolve(capabilities).maximum_risk_level
 
     @staticmethod
     def _ensure_capabilities(
