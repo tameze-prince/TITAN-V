@@ -1749,7 +1749,7 @@ async def create_and_start_workflow(
                 EventModel.aggregate_type == "TASK",
                 EventModel.aggregate_id.in_([task.id for task in tasks]),
             )
-            .order_by(EventModel.created_at.desc())
+            .order_by(EventModel.occurred_at.desc())
         )
     )
     usage_history: dict[tuple[UUID, str], list[tuple[float | None, int | None]]] = {}
