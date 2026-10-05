@@ -23,13 +23,22 @@ from titan.runtime.service import AgentRuntime
 from titan.runtime.tools import ToolCall
 
 
+_real_provider_ready = (
+    (
+        settings.model_provider == "openai"
+        and bool(settings.openai_api_key)
+    )
+    or (
+        settings.model_provider == "nvidia"
+        and bool(settings.nvidia_api_key)
+    )
+)
+
 pytestmark = pytest.mark.skipif(
-    os.getenv("TITAN_E2E_REAL") != "1"
-    or settings.model_provider != "openai"
-    or not settings.openai_api_key,
+    os.getenv("TITAN_E2E_REAL") != "1" or not _real_provider_ready,
     reason=(
         "Real-provider E2E requires TITAN_E2E_REAL=1, "
-        "TITAN_MODEL_PROVIDER=openai, and TITAN_OPENAI_API_KEY."
+        "plus a configured OpenAI or NVIDIA provider."
     ),
 )
 
@@ -67,7 +76,7 @@ async def test_real_provider_builds_and_tests_a_workspace_project(
         agent_name="engineering-executor",
     )
 
-    assert result.provider == "openai"
+    assert result.provider == settings.model_provider
     assert result.status == "COMPLETED"
 
     workspace = runtime.workspace_manager.ensure(project_id, task_id).root
