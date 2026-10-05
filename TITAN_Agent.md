@@ -11200,3 +11200,93 @@ A successful run demonstrates only that TITAN can execute one controlled real-mo
 **TITAN REAL-PROJECT VALIDATION BATCH 1**
 
 
+
+
+# 59. REAL-PROVIDER VALIDATION CHECKPOINT — NVIDIA NEMOTRON
+
+## Status
+
+Implemented on 2026-10-05.
+
+The first real external model provider path is now implemented for local validation:
+
+- provider: NVIDIA
+- API style: OpenAI-compatible Chat Completions
+- default model: nvidia/nemotron-3-ultra-550b-a55b
+- endpoint: https://integrate.api.nvidia.com/v1
+- reasoning: configurable
+- tool calling: supported through the TITAN tool loop
+- structured output: JSON mode followed by Pydantic validation
+
+## DEC-009 — NVIDIA as first external real-model validation provider
+
+### Context
+
+TITAN must be validated against a real model before release. A deterministic local provider cannot prove real model routing, tool calling, planning behavior, or engineering execution.
+
+### Problem
+
+The runtime was already abstracted around provider interfaces, but the engineering vertical slice needed a real provider that supports reasoning, structured responses, and tool calling.
+
+### Options considered
+
+1. Use only the existing OpenAI Responses provider.
+2. Add a provider-specific NVIDIA implementation using NVIDIA's OpenAI-compatible Chat Completions API.
+3. Couple the runtime directly to an NVIDIA-specific SDK.
+
+### Decision
+
+Use a provider-specific NVIDIA implementation behind the existing ModelProvider abstraction.
+
+The provider is selected through configuration and exposes the model as an nvidia:<model> route.
+
+### Reasons
+
+- keeps TITAN model-independent;
+- follows NVIDIA's documented OpenAI-compatible API;
+- preserves the existing provider router;
+- allows provider-specific tool-call adaptation without contaminating the core tool loop;
+- permits future NVIDIA, OpenAI, local NIM, or other providers to coexist.
+
+### Consequences
+
+The NVIDIA tool loop stores short-lived continuation state in the provider process. A future durable multi-process execution design must move this continuation state into durable workflow state or another shared mechanism.
+
+### Evidence
+
+- tests/unit/test_nvidia_provider.py
+- tests/e2e/test_real_project_execution.py
+- docs/LOCAL_VALIDATION.md
+
+### Approval status
+
+Accepted as the local validation implementation. Not yet considered production provider infrastructure.
+
+## REAL-PROJECT VALIDATION BATCH 1
+
+The acceptance sequence is now explicitly:
+
+1. deterministic baseline;
+2. NVIDIA provider registration;
+3. NVIDIA intent compilation;
+4. first real-project engineering vertical slice;
+5. existing-project modification;
+6. intentional failure + self-repair;
+7. tool-failure recovery;
+8. HITL approval and quorum;
+9. workflow recovery;
+10. multi-task dependency graph;
+11. explainability/evidence review;
+12. real personal project validation.
+
+A release candidate may not be declared solely from a single successful E2E run.
+
+## CURRENT IMPLEMENTATION NOTE
+
+The first external provider validation focuses on software engineering. It does not yet prove every specialist listed in this document, production deployment, browser automation, or unrestricted autonomous operation.
+
+The next canonical artifact for local testing is:
+
+> docs/LOCAL_VALIDATION.md
+
+It defines the local commands, evidence locations, acceptance matrix, PASS/FAIL/BLOCKED rules, and release gate.
