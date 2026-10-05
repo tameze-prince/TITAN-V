@@ -14,6 +14,7 @@ invariants.
 
 import os
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -48,12 +49,22 @@ async def test_real_provider_builds_and_tests_a_workspace_project(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "workspace_root", str(tmp_path / "workspaces"))
+    run_id = str(uuid4())
+    task_id = str(uuid4())
+    project_id = str(uuid4())
+
+    keep_workspace = os.getenv("TITAN_E2E_KEEP_WORKSPACE") == "1"
+    configured_root = os.getenv("TITAN_E2E_WORKSPACE_ROOT")
+    if configured_root:
+        workspace_root = Path(configured_root)
+    elif keep_workspace:
+        workspace_root = Path(".titan") / "e2e-workspaces" / run_id
+    else:
+        workspace_root = tmp_path / "workspaces"
+
+    monkeypatch.setattr(settings, "workspace_root", str(workspace_root))
 
     runtime = AgentRuntime()
-    task_id = "11111111-1111-4111-8111-111111111111"
-    project_id = "22222222-2222-4222-8222-222222222222"
-    run_id = "33333333-3333-4333-8333-333333333333"
 
     context = AgentTaskContext(
         task_id=task_id,
@@ -80,6 +91,7 @@ async def test_real_provider_builds_and_tests_a_workspace_project(
     assert result.status == "COMPLETED"
 
     workspace = runtime.workspace_manager.ensure(project_id, task_id).root
+    assert workspace.is_dir()
     app_file = workspace / "app.py"
     test_file = workspace / "test_app.py"
     assert app_file.is_file()
