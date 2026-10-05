@@ -724,3 +724,14 @@ with these first five scenarios:
     5. Execute a 3-task dependent project graph.
 
 Only after these pass consistently should we move to production hardening and release-candidate work.
+
+
+## E2E evidence-preserving mode
+
+For a persistent local E2E run, use:
+
+    bash scripts/run_nvidia_e2e.sh
+
+The runner stores the execution log under `.titan/logs/` and preserves the test workspace under `.titan/e2e-workspaces/<run-id>/`.
+
+This is separate from the normal runtime workspace root `.titan/workspaces`.
