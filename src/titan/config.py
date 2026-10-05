@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-5"
     openai_base_url: str | None = None
+    nvidia_api_key: str | None = None
+    nvidia_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_enable_thinking: bool = True
+    nvidia_max_output_tokens: int = 16_384
+    nvidia_temperature: float = 1.0
+    nvidia_top_p: float = 0.95
     agent_execution_timeout_seconds: int = 120
     general_agent_max_concurrency: int = 4
     engineering_agent_max_concurrency: int = 2
