@@ -227,6 +227,13 @@ def build_default_provider_router(
     openai_api_key: str | None = None,
     openai_model: str = "gpt-5",
     openai_base_url: str | None = None,
+    nvidia_api_key: str | None = None,
+    nvidia_model: str = "nvidia/nemotron-3-ultra-550b-a55b",
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1",
+    nvidia_max_output_tokens: int = 16_000,
+    nvidia_temperature: float = 1.0,
+    nvidia_top_p: float = 0.95,
+    nvidia_enable_thinking: bool = True,
 ) -> ProviderRouter:
     router = ProviderRouter()
     router.register(LocalStructuredProvider())
@@ -236,6 +243,20 @@ def build_default_provider_router(
                 api_key=openai_api_key,
                 model=openai_model,
                 base_url=openai_base_url,
+            )
+        )
+    if nvidia_api_key:
+        from titan.runtime.nvidia_provider import NVIDIAChatCompletionsProvider
+
+        router.register(
+            NVIDIAChatCompletionsProvider(
+                api_key=nvidia_api_key,
+                model=nvidia_model,
+                base_url=nvidia_base_url,
+                max_output_tokens=nvidia_max_output_tokens,
+                temperature=nvidia_temperature,
+                top_p=nvidia_top_p,
+                enable_thinking=nvidia_enable_thinking,
             )
         )
     return router
