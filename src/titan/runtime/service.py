@@ -47,7 +47,11 @@ ENGINEERING_AGENT = AgentContract(
     model=(
         "openai:" + settings.openai_model
         if settings.model_provider == "openai" and settings.openai_api_key
-        else "local"
+        else (
+            "nvidia:" + settings.nvidia_model
+            if settings.model_provider == "nvidia" and settings.nvidia_api_key
+            else "local"
+        )
     ),
 )
 
@@ -64,7 +68,11 @@ GENERAL_AGENT = AgentContract(
     model=(
         "openai:" + settings.openai_model
         if settings.model_provider == "openai" and settings.openai_api_key
-        else "local"
+        else (
+            "nvidia:" + settings.nvidia_model
+            if settings.model_provider == "nvidia" and settings.nvidia_api_key
+            else "local"
+        )
     ),
     risk_ceiling="R1",
 )
@@ -108,6 +116,13 @@ class AgentRuntime:
             openai_api_key=settings.openai_api_key,
             openai_model=settings.openai_model,
             openai_base_url=settings.openai_base_url,
+            nvidia_api_key=settings.nvidia_api_key,
+            nvidia_model=settings.nvidia_model,
+            nvidia_base_url=settings.nvidia_base_url,
+            nvidia_max_output_tokens=settings.nvidia_max_output_tokens,
+            nvidia_temperature=settings.nvidia_temperature,
+            nvidia_top_p=settings.nvidia_top_p,
+            nvidia_enable_thinking=settings.nvidia_enable_thinking,
         )
         self.model_router = ModelRouter(self.providers)
         self.model_router.register(
@@ -129,6 +144,16 @@ class AgentRuntime:
                     priority=20,
                     input_cost_per_1k=settings.openai_input_cost_per_1k,
                     output_cost_per_1k=settings.openai_output_cost_per_1k,
+                )
+            )
+        if settings.nvidia_api_key:
+            self.model_router.register(
+                ModelRoute(
+                    name=f"nvidia-{settings.nvidia_model}",
+                    provider="nvidia",
+                    model=f"nvidia:{settings.nvidia_model}",
+                    quality_tier=2,
+                    priority=20,
                 )
             )
         self.policy = policy or RuntimePolicy()
