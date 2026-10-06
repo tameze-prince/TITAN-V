@@ -106,12 +106,31 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
         )
 
     @staticmethod
-    def _chat_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _external_tool_name(name: str) -> str:
+        encoded = []
+        for char in name:
+            if char.isalnum() or char in {"_", "-"}:
+                encoded.append(char)
+            else:
+                encoded.append(f"_x{ord(char):x}_")
+        return "".join(encoded)
+
+    @staticmethod
+    def _internal_tool_name(name: str) -> str:
+        import re
+
+        def decode(match: re.Match[str]) -> str:
+            return chr(int(match.group(1), 16))
+
+        return re.sub(r"_x([0-9a-f]+)_", decode, name)
+
+    @classmethod
+    def _chat_tools(cls, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
             {
                 "type": "function",
                 "function": {
-                    "name": tool["name"],
+                    "name": cls._external_tool_name(tool["name"]),
                     "description": tool.get("description", ""),
                     "strict": tool.get("strict", False),
                     "parameters": tool.get(
@@ -193,7 +212,7 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
             tool_calls.append(
                 ModelToolCall(
                     call_id=call.id,
-                    name=call.function.name,
+                    name=self._internal_tool_name(call.function.name),
                     arguments=arguments,
                 )
             )
