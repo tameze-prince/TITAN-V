@@ -36,7 +36,7 @@ def test_nvidia_tool_schema_is_converted_to_chat_completions_shape() -> None:
         {
             "type": "function",
             "function": {
-                "name": "sandbox.exec",
+                "name": "sandbox_x2e_exec",
                 "description": "Execute a sandbox command",
                 "strict": False,
                 "parameters": {
@@ -48,3 +48,13 @@ def test_nvidia_tool_schema_is_converted_to_chat_completions_shape() -> None:
             },
         }
     ]
+
+
+def test_nvidia_tool_name_round_trip_preserves_titan_name() -> None:
+    from titan.runtime.nvidia_provider import NVIDIAChatCompletionsProvider
+
+    encoded = NVIDIAChatCompletionsProvider._external_tool_name("workspace.list")
+    decoded = NVIDIAChatCompletionsProvider._internal_tool_name(encoded)
+
+    assert encoded == "workspace_x2e_list"
+    assert decoded == "workspace.list"
