@@ -18,7 +18,7 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
         base_url: str,
         timeout: float = 60.0,
         max_output_tokens: int = 16_000,
-        tool_max_output_tokens: int = 4_096,
+        tool_max_output_tokens: int = 2_048,
         temperature: float = 1.0,
         top_p: float = 0.95,
         enable_thinking: bool = True,
@@ -183,6 +183,7 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
                             "role": "tool",
                             "tool_call_id": item["call_id"],
                             "content": item["output"],
+                            "name": item.get("name", ""),
                         }
                     )
             state["pending_assistant"] = None
@@ -192,7 +193,7 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
             model=self._model,
             messages=messages,
             tools=self._chat_tools(tools),
-            tool_choice="auto",
+            tool_choice="required" if previous_response_id is None else "auto",
             max_tokens=self._tool_max_output_tokens,
             temperature=self._temperature,
             top_p=self._top_p,
