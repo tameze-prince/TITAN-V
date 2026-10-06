@@ -18,12 +18,14 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
         base_url: str,
         timeout: float = 60.0,
         max_output_tokens: int = 16_000,
+        tool_max_output_tokens: int = 4_096,
         temperature: float = 1.0,
         top_p: float = 0.95,
         enable_thinking: bool = True,
     ) -> None:
         self._model = model
         self._max_output_tokens = max_output_tokens
+        self._tool_max_output_tokens = tool_max_output_tokens
         self._temperature = temperature
         self._top_p = top_p
         self._enable_thinking = enable_thinking
@@ -191,7 +193,7 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
             messages=messages,
             tools=self._chat_tools(tools),
             tool_choice="auto",
-            max_tokens=self._max_output_tokens,
+            max_tokens=self._tool_max_output_tokens,
             temperature=self._temperature,
             top_p=self._top_p,
             extra_body={
