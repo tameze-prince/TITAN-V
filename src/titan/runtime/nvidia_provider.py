@@ -89,12 +89,6 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
             temperature=0.0,
             top_p=self._top_p,
             response_format={"type": "json_object"},
-            extra_body={
-                "chat_template_kwargs": {
-                    "enable_thinking": False,
-                    "force_nonempty_content": True,
-                }
-            },
         )
         content = response.choices[0].message.content
         if not content:
@@ -109,22 +103,13 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
 
     @staticmethod
     def _external_tool_name(name: str) -> str:
-        encoded = []
-        for char in name:
-            if char.isalnum() or char in {"_", "-"}:
-                encoded.append(char)
-            else:
-                encoded.append(f"_x{ord(char):x}_")
-        return "".join(encoded)
+        # NVIDIA API doesn't accept dots in tool names, replace with underscore
+        return name.replace(".", "_")
 
     @staticmethod
     def _internal_tool_name(name: str) -> str:
-        import re
-
-        def decode(match: re.Match[str]) -> str:
-            return chr(int(match.group(1), 16))
-
-        return re.sub(r"_x([0-9a-f]+)_", decode, name)
+        # Convert back from external format to internal format
+        return name.replace("_", ".", 1) if "_" in name else name
 
     @classmethod
     def _chat_tools(cls, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -197,12 +182,6 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
             max_tokens=self._tool_max_output_tokens,
             temperature=self._temperature,
             top_p=self._top_p,
-            extra_body={
-                "chat_template_kwargs": {
-                    "enable_thinking": self._enable_thinking,
-                    "force_nonempty_content": True,
-                }
-            },
         )
 
         message = response.choices[0].message
