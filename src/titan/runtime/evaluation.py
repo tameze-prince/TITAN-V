@@ -23,6 +23,7 @@ def evaluate_execution(
     *,
     output: BaseModel,
     artifact_markdown: str,
+    require_tool_execution: bool = False,
 ) -> EvaluationReport:
     checks = {
         "structured_output": isinstance(output, BaseModel),
@@ -30,6 +31,24 @@ def evaluate_execution(
         "result_present": bool(getattr(output, "result", {})),
         "artifact_present": bool(artifact_markdown.strip()),
     }
+    if require_tool_execution:
+        result = getattr(output, "result", {})
+        tool_calls = result.get("tool_calls", []) if isinstance(result, dict) else []
+        tool_results = result.get("tool_results", []) if isinstance(result, dict) else []
+        completed_call_ids = {
+            item.get("call_id")
+            for item in tool_results
+            if isinstance(item, dict)
+            and item.get("kind") == "tool_result"
+            and item.get("status") == "COMPLETED"
+            and item.get("call_id")
+        }
+        checks["tool_execution_present"] = any(
+            isinstance(item, dict)
+            and item.get("kind") == "tool_call"
+            and item.get("call_id") in completed_call_ids
+            for item in tool_calls
+        )
     passed = all(checks.values())
     failed_count = sum(1 for value in checks.values() if not value)
     score = sum(checks.values()) / len(checks)

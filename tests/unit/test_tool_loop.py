@@ -119,3 +119,68 @@ def test_context_engine_marks_external_data_untrusted(tmp_path: Path) -> None:
 
     assert "untrusted external data" in frame.system_prompt
     assert "Available tools" in frame.user_prompt
+
+
+class TextOnlyProvider:
+    async def generate_tool_turn(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt,
+        tools,
+        previous_response_id,
+    ) -> ModelToolTurn:
+        return ModelToolTurn(
+            response_id=None,
+            text='[[{"name": "workspace_list", "parameters": {"path": "."}}]]',
+        )
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_rejects_text_that_mimics_a_tool_call(tmp_path: Path) -> None:
+    async def noop_tool(
+        context: ToolExecutionContext, arguments: dict
+    ) -> dict:
+        return {"ok": True}
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="workspace.list",
+            description="List workspace entries.",
+            risk_level="R1",
+            handler=noop_tool,
+            input_schema={
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "additionalProperties": False,
+            },
+        )
+    )
+    contract = AgentContract(
+        name="test-agent",
+        role="Test",
+        instructions="Use the provided tool.",
+        capabilities=("analysis",),
+        allowed_tools=("workspace.list",),
+        risk_ceiling="R1",
+        model="local",
+    )
+    task = AgentTaskContext(
+        task_id="task-1",
+        run_id="run-1",
+        project_id="project-1",
+        title="List files",
+        objective="List files using the tool.",
+        risk_level="R1",
+    )
+
+    with pytest.raises(RuntimeError, match="no native tool calls"):
+        await AgentToolLoop().run(
+            provider=TextOnlyProvider(),
+            contract=contract,
+            task=task,
+            workspace=tmp_path,
+            tools=(registry.resolve("workspace.list"),),
+            executor=ToolExecutor(registry),
+        )

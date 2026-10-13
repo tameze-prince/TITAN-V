@@ -345,6 +345,7 @@ class AgentRuntime:
             evaluation = evaluate_execution(
                 output=parsed,
                 artifact_markdown=parsed.artifact_markdown,
+                require_tool_execution=bool(tool_names),
             )
 
             if evaluation.passed:

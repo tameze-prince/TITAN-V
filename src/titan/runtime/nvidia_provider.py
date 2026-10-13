@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -103,8 +104,42 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
 
     @staticmethod
     def _external_tool_name(name: str) -> str:
-        # NVIDIA API doesn't accept dots in tool names, replace with underscore
-        return name.replace(".", "_")
+        """Return an API-compatible alias for an internal TITAN tool name."""
+        alias = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_")
+        if not alias:
+            raise ValueError("Tool name cannot be converted to an API alias")
+        return alias
+
+    @classmethod
+    def _tool_name_map(cls, tools: list[dict[str, Any]]) -> dict[str, str]:
+        """Map API-safe names back to the exact registered TITAN tool names."""
+        aliases: dict[str, str] = {}
+        for tool in tools:
+            internal_name = tool["name"]
+            external_name = cls._external_tool_name(internal_name)
+            existing = aliases.get(external_name)
+            if existing is not None and existing != internal_name:
+                raise ValueError(
+                    f"TITAN tool names collide after provider aliasing: "
+                    f"{existing!r} and {internal_name!r}"
+                )
+            aliases[external_name] = internal_name
+        return aliases
+
+    @classmethod
+    def _align_prompt_tool_names(
+        cls,
+        prompt: str,
+        tool_name_map: dict[str, str],
+    ) -> str:
+        """Use the same callable aliases in prompt text and API schemas."""
+        for external_name, internal_name in sorted(
+            tool_name_map.items(),
+            key=lambda item: len(item[1]),
+            reverse=True,
+        ):
+            prompt = prompt.replace(internal_name, external_name)
+        return prompt
 
     @staticmethod
     def _internal_tool_name(name: str) -> str:
@@ -119,7 +154,6 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
                 "function": {
                     "name": cls._external_tool_name(tool["name"]),
                     "description": tool.get("description", ""),
-                    "strict": tool.get("strict", False),
                     "parameters": tool.get(
                         "parameters",
                         {
@@ -143,11 +177,28 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
     ):
         from titan.runtime.tool_loop import ModelToolCall, ModelToolTurn
 
+        tool_name_map = self._tool_name_map(tools)
+
         if previous_response_id is None:
             conversation_id = uuid4().hex
+            normalized_system = self._align_prompt_tool_names(
+                system_prompt, tool_name_map
+            )
+            if isinstance(user_prompt, str):
+                normalized_user = self._align_prompt_tool_names(
+                    user_prompt, tool_name_map
+                )
+            else:
+                normalized_user = user_prompt
+            normalized_system += (
+                "\n\nTool protocol: invoke the native function tools provided "
+                "with this request. Do not write a tool call as JSON or text in "
+                "the assistant response; text that describes a tool call is not "
+                "executed. Use the callable tool names exactly as provided."
+            )
             messages: list[dict[str, Any]] = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "system", "content": normalized_system},
+                {"role": "user", "content": normalized_user},
             ]
             state = {"messages": messages, "pending_assistant": None}
             self._conversations[conversation_id] = state
@@ -157,20 +208,28 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
                 raise ValueError("NVIDIA tool-loop continuation state is unavailable")
             messages = state["messages"]
             pending = state.get("pending_assistant")
+            pending_names: dict[str, str] = {}
             if pending is not None:
+                for pending_call in pending.get("tool_calls", []):
+                    function = pending_call.get("function", {})
+                    call_id = pending_call.get("id")
+                    function_name = function.get("name")
+                    if isinstance(call_id, str) and isinstance(function_name, str):
+                        pending_names[call_id] = function_name
                 messages.append(pending)
             if not isinstance(user_prompt, list):
                 raise TypeError("NVIDIA continuation expects tool results")
             for item in user_prompt:
                 if item.get("type") == "function_call_output":
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": item["call_id"],
-                            "content": item["output"],
-                            "name": item.get("name", ""),
-                        }
-                    )
+                    tool_message = {
+                        "role": "tool",
+                        "tool_call_id": item["call_id"],
+                        "content": item["output"],
+                    }
+                    function_name = pending_names.get(item["call_id"])
+                    if function_name:
+                        tool_message["name"] = function_name
+                    messages.append(tool_message)
             state["pending_assistant"] = None
             conversation_id = previous_response_id
 
@@ -191,10 +250,16 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
             arguments = json.loads(call.function.arguments or "{}")
             if not isinstance(arguments, dict):
                 raise TypeError("NVIDIA tool arguments must be a JSON object")
+            internal_name = tool_name_map.get(call.function.name)
+            if internal_name is None:
+                raise ValueError(
+                    "NVIDIA returned a call for an unregistered tool alias: "
+                    f"{call.function.name!r}"
+                )
             tool_calls.append(
                 ModelToolCall(
                     call_id=call.id,
-                    name=self._internal_tool_name(call.function.name),
+                    name=internal_name,
                     arguments=arguments,
                 )
             )

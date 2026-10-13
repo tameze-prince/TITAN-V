@@ -125,7 +125,9 @@ async def test_agent_runtime_retries_after_evaluation_failure(monkeypatch) -> No
         ]
     )
 
-    def fake_evaluate_execution(*, output, artifact_markdown):
+    def fake_evaluate_execution(
+        *, output, artifact_markdown, require_tool_execution=False
+    ):
         return next(checks)
 
     monkeypatch.setattr("titan.runtime.service.evaluate_execution", fake_evaluate_execution)
