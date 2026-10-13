@@ -1,3 +1,5 @@
+import pytest
+
 from titan.runtime.providers import build_default_provider_router
 
 
@@ -36,9 +38,8 @@ def test_nvidia_tool_schema_is_converted_to_chat_completions_shape() -> None:
         {
             "type": "function",
             "function": {
-                "name": "sandbox_x2e_exec",
+                "name": "sandbox_exec",
                 "description": "Execute a sandbox command",
-                "strict": False,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -53,8 +54,19 @@ def test_nvidia_tool_schema_is_converted_to_chat_completions_shape() -> None:
 def test_nvidia_tool_name_round_trip_preserves_titan_name() -> None:
     from titan.runtime.nvidia_provider import NVIDIAChatCompletionsProvider
 
-    encoded = NVIDIAChatCompletionsProvider._external_tool_name("workspace.list")
-    decoded = NVIDIAChatCompletionsProvider._internal_tool_name(encoded)
+    tools = [{"name": "workspace.list"}, {"name": "sandbox.exec"}]
+    aliases = NVIDIAChatCompletionsProvider._tool_name_map(tools)
 
-    assert encoded == "workspace_x2e_list"
-    assert decoded == "workspace.list"
+    assert aliases == {
+        "workspace_list": "workspace.list",
+        "sandbox_exec": "sandbox.exec",
+    }
+
+
+def test_nvidia_tool_alias_collisions_are_rejected() -> None:
+    from titan.runtime.nvidia_provider import NVIDIAChatCompletionsProvider
+
+    with pytest.raises(ValueError, match="collide after provider aliasing"):
+        NVIDIAChatCompletionsProvider._tool_name_map(
+            [{"name": "workspace.list"}, {"name": "workspace_list"}]
+        )

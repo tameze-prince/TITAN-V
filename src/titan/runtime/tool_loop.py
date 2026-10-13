@@ -117,6 +117,11 @@ class AgentToolLoop:
             }
 
             if not turn.tool_calls:
+                if step == 0 and tools:
+                    raise RuntimeError(
+                        "Provider returned no native tool calls on the initial "
+                        "required-tool turn; refusing to treat text as executed work"
+                    )
                 return ToolLoopResult(
                     final_text=final_text,
                     tool_calls=history,
@@ -167,6 +172,7 @@ class AgentToolLoop:
                         {
                             "type": "function_call_output",
                             "call_id": call.call_id,
+                            "name": call.name,
                             "output": json.dumps(result_payload, default=str),
                         }
                     )
@@ -188,6 +194,7 @@ class AgentToolLoop:
                         {
                             "type": "function_call_output",
                             "call_id": call.call_id,
+                            "name": call.name,
                             "output": json.dumps(error_payload),
                         }
                     )
