@@ -81,13 +81,45 @@ class LocalStructuredProvider(ModelProvider):
         tools: list[dict[str, Any]],
         previous_response_id: str | None,
     ):
-        from titan.runtime.tool_loop import ModelToolTurn
+        from titan.runtime.tool_loop import ModelToolCall, ModelToolTurn
+
+        # The local provider is deterministic test scaffolding, not a model.
+        # It still must exercise the real tool boundary when a tool is available.
+        if previous_response_id is not None:
+            return ModelToolTurn(
+                response_id=None,
+                text="Local deterministic execution completed after the tool result.",
+                usage={"mode": "deterministic"},
+            )
+
+        list_tool = next(
+            (
+                tool
+                for tool in tools
+                if tool.get("name") in {"workspace.list", "workspace_list"}
+            ),
+            None,
+        )
+        if list_tool is None:
+            return ModelToolTurn(
+                response_id=None,
+                text=(
+                    "Local provider cannot safely synthesize a call for the "
+                    "available tools."
+                ),
+                usage={"mode": "deterministic"},
+            )
 
         return ModelToolTurn(
-            response_id=previous_response_id or "local-response",
-            text=f"Local tool-loop execution completed for: "
-            f"{user_prompt if isinstance(user_prompt, str) else 'tool results'}",
-            tool_calls=(),
+            response_id="local-tool-loop",
+            text="",
+            tool_calls=(
+                ModelToolCall(
+                    call_id="local-workspace-list",
+                    name=list_tool["name"],
+                    arguments={"path": "."},
+                ),
+            ),
             usage={"mode": "deterministic"},
         )
 
