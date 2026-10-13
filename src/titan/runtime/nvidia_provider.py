@@ -218,7 +218,14 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
                 raise ValueError("NVIDIA tool-loop continuation state is unavailable")
             messages = state["messages"]
             pending = state.get("pending_assistant")
+            pending_names: dict[str, str] = {}
             if pending is not None:
+                for pending_call in pending.get("tool_calls", []):
+                    function = pending_call.get("function", {})
+                    call_id = pending_call.get("id")
+                    function_name = function.get("name")
+                    if isinstance(call_id, str) and isinstance(function_name, str):
+                        pending_names[call_id] = function_name
                 messages.append(pending)
             if not isinstance(user_prompt, list):
                 raise TypeError("NVIDIA continuation expects tool results")
@@ -229,11 +236,9 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
                         "tool_call_id": item["call_id"],
                         "content": item["output"],
                     }
-                    internal_name = item.get("name")
-                    if internal_name:
-                        tool_message["name"] = self._external_tool_name(
-                            internal_name
-                        )
+                    function_name = pending_names.get(item["call_id"])
+                    if function_name:
+                        tool_message["name"] = function_name
                     messages.append(tool_message)
             state["pending_assistant"] = None
             conversation_id = previous_response_id

@@ -172,7 +172,6 @@ class AgentToolLoop:
                         {
                             "type": "function_call_output",
                             "call_id": call.call_id,
-                            "name": call.name,
                             "output": json.dumps(result_payload, default=str),
                         }
                     )
@@ -194,7 +193,6 @@ class AgentToolLoop:
                         {
                             "type": "function_call_output",
                             "call_id": call.call_id,
-                            "name": call.name,
                             "output": json.dumps(error_payload),
                         }
                     )

@@ -70,3 +70,16 @@ def test_nvidia_tool_alias_collisions_are_rejected() -> None:
         NVIDIAChatCompletionsProvider._tool_name_map(
             [{"name": "workspace.list"}, {"name": "workspace_list"}]
         )
+
+def test_nvidia_prompt_uses_api_aliases_consistently() -> None:
+    from titan.runtime.nvidia_provider import NVIDIAChatCompletionsProvider
+
+    tools = [{"name": "workspace.list"}, {"name": "sandbox.exec"}]
+    aliases = NVIDIAChatCompletionsProvider._tool_name_map(tools)
+    prompt = '{"name": "workspace.list"} Use sandbox.exec.'
+
+    normalized = NVIDIAChatCompletionsProvider._align_prompt_tool_names(
+        prompt, aliases
+    )
+
+    assert normalized == '{"name": "workspace_list"} Use sandbox_exec.'
