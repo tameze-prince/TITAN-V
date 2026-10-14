@@ -3,7 +3,12 @@ from pathlib import Path
 
 from titan.runtime.contracts import AgentContract, AgentTaskContext
 from titan.runtime.context import ContextEngine
-from titan.runtime.tool_loop import AgentToolLoop, ModelToolCall, ModelToolTurn
+from titan.runtime.tool_loop import (
+    AgentToolLoop,
+    ModelToolCall,
+    ModelToolTurn,
+    ToolLoopPolicy,
+)
 from titan.runtime.tools import ToolDefinition, ToolExecutor, ToolExecutionContext, ToolRegistry
 
 
@@ -79,7 +84,9 @@ async def test_tool_loop_executes_tool_and_returns_final_answer(tmp_path: Path) 
         risk_level="R1",
     )
 
-    result = await AgentToolLoop().run(
+    result = await AgentToolLoop(
+        policy=ToolLoopPolicy(max_steps=1),
+    ).run(
         provider=FakeProvider(),
         contract=contract,
         task=task,
