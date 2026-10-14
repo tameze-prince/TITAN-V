@@ -2,12 +2,29 @@ import pytest
 
 from titan.runtime.contracts import AgentContract, AgentTaskContext, AgentModelOutput
 from titan.runtime.providers import LocalStructuredProvider, ModelRequest, ProviderRouter
-from titan.runtime.service import AgentRuntime
+from titan.runtime.service import (
+    AgentContractRegistry,
+    AgentRuntime,
+    ENGINEERING_AGENT,
+    GENERAL_AGENT,
+)
+
+
+def build_local_runtime() -> AgentRuntime:
+    """Use deterministic providers regardless of local .env configuration."""
+    contracts = AgentContractRegistry(
+        (
+            GENERAL_AGENT.model_copy(update={"model": "local"}),
+            ENGINEERING_AGENT.model_copy(update={"model": "local"}),
+        )
+    )
+    providers = ProviderRouter({"local": LocalStructuredProvider()})
+    return AgentRuntime(contracts=contracts, providers=providers)
 
 
 @pytest.mark.asyncio
 async def test_agent_runtime_executes_structured_local_task() -> None:
-    runtime = AgentRuntime()
+    runtime = build_local_runtime()
     context = AgentTaskContext(
         task_id="task-1",
         run_id="run-1",
@@ -29,7 +46,7 @@ async def test_agent_runtime_executes_structured_local_task() -> None:
 
 @pytest.mark.asyncio
 async def test_agent_runtime_rejects_task_above_agent_risk_ceiling() -> None:
-    runtime = AgentRuntime()
+    runtime = build_local_runtime()
     context = AgentTaskContext(
         task_id="task-2",
         run_id="run-2",
@@ -70,7 +87,7 @@ def test_provider_router_rejects_unknown_provider() -> None:
 async def test_engineering_agent_uses_tool_loop_boundary() -> None:
     from uuid import uuid4
 
-    runtime = AgentRuntime()
+    runtime = build_local_runtime()
     context = AgentTaskContext(
         task_id=str(uuid4()),
         run_id=str(uuid4()),
