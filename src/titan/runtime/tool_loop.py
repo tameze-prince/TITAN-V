@@ -102,7 +102,9 @@ class AgentToolLoop:
         tool_call_count = 0
         usage: dict[str, Any] = {}
 
-        for step in range(self.policy.max_steps):
+        # Reserve one final model turn for a completion response after the last
+        # permitted tool-execution turn. A final answer must not require another tool.
+        for step in range(self.policy.max_steps + 1):
             turn = await provider.generate_tool_turn(
                 system_prompt=frame.system_prompt,
                 user_prompt=first_input,
@@ -127,6 +129,17 @@ class AgentToolLoop:
                     tool_calls=history,
                     tool_results=[item for item in history if item["kind"] == "tool_result"],
                     usage=usage,
+                )
+
+            if step >= self.policy.max_steps:
+                requested = ", ".join(
+                    f"{call.name}(args={','.join(sorted(call.arguments))})"
+                    for call in turn.tool_calls
+                )
+                raise RuntimeError(
+                    f"Tool loop reached max_steps={self.policy.max_steps} without "
+                    f"a final answer; provider requested additional tool call(s): "
+                    f"{requested}"
                 )
 
             tool_call_count += len(turn.tool_calls)
@@ -199,5 +212,5 @@ class AgentToolLoop:
 
             first_input = outputs
 
-        raise RuntimeError("Tool loop reached the maximum number of steps")
+        raise RuntimeError("Tool loop exited without a final model response")
 
