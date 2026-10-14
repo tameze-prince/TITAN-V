@@ -241,6 +241,19 @@ class NVIDIAChatCompletionsProvider(ModelProvider):
             max_tokens=self._tool_max_output_tokens,
             temperature=self._temperature,
             top_p=self._top_p,
+            # Nemotron 3 Ultra's tool-call parser requires these template flags.
+            # Keep thinking enabled on its native tool path even when the optional
+            # setting is disabled for ordinary, non-tool structured generation.
+            extra_body={
+                "chat_template_kwargs": {
+                    "enable_thinking": (
+                        True
+                        if "nemotron-3-ultra-550b-a55b" in self._model.lower()
+                        else self._enable_thinking
+                    ),
+                    "force_nonempty_content": True,
+                }
+            },
         )
 
         message = response.choices[0].message
