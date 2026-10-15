@@ -136,10 +136,31 @@ class AgentToolLoop:
                     f"{call.name}(args={','.join(sorted(call.arguments))})"
                     for call in turn.tool_calls
                 )
+                recent_results = []
+                for item in history:
+                    if item.get("kind") != "tool_result":
+                        continue
+                    output_text = json.dumps(
+                        item.get("output", {}),
+                        ensure_ascii=False,
+                        default=str,
+                    )
+                    recent_results.append(
+                        {
+                            "step": item.get("step"),
+                            "tool": item.get("name"),
+                            "status": item.get("status"),
+                            "output": output_text[:1200],
+                        }
+                    )
+                diagnostics = json.dumps(
+                    recent_results[-5:],
+                    ensure_ascii=False,
+                )
                 raise RuntimeError(
                     f"Tool loop reached max_steps={self.policy.max_steps} without "
                     f"a final answer; provider requested additional tool call(s): "
-                    f"{requested}"
+                    f"{requested}. Recent tool results (last 5): {diagnostics}"
                 )
 
             tool_call_count += len(turn.tool_calls)
