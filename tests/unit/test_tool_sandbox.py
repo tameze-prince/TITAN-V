@@ -4,7 +4,14 @@ from pathlib import Path
 import pytest
 
 from titan.runtime.sandbox import DockerSandbox, SandboxPolicy, SandboxRequest, SandboxResult
-from titan.runtime.tools import ToolCall, ToolDefinition, ToolExecutionContext, ToolExecutor, ToolRegistry
+from titan.runtime.tools import (
+    ToolCall,
+    ToolDefinition,
+    ToolExecutionContext,
+    ToolExecutor,
+    ToolRegistry,
+    build_default_tool_registry,
+)
 
 
 class FakeSandbox:
@@ -121,6 +128,8 @@ def test_docker_sandbox_builds_hardened_command(tmp_path: Path) -> None:
     assert "no-new-privileges" in command
     assert "--read-only" in command
     assert "--pids-limit" in command
+    assert "--user" in command
+    assert command[command.index("--user") + 1] == f"{__import__('os').getuid()}:{__import__('os').getgid()}"
     assert command[-4:] == ["example:latest", "python", "-c", "print(1)"]
 
 
@@ -133,3 +142,42 @@ def test_sandbox_rejects_missing_workspace(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="workspace"):
         asyncio.run(run())
+
+
+@pytest.mark.asyncio
+async def test_default_sandbox_tool_marks_nonzero_exit_as_failed(
+    tmp_path: Path,
+) -> None:
+    class FailingSandbox:
+        async def run(self, request: SandboxRequest) -> SandboxResult:
+            return SandboxResult(
+                exit_code=2,
+                stdout="",
+                stderr="Permission denied",
+                duration_ms=5,
+            )
+
+    registry = build_default_tool_registry(sandbox=FailingSandbox())
+    executor = ToolExecutor(registry)
+    context = ToolExecutionContext(
+        task_id="task",
+        run_id="run",
+        project_id="project",
+        task_risk="R2",
+        agent_risk_ceiling="R2",
+        workspace=tmp_path,
+    )
+
+    result = await executor.execute(
+        ToolCall(
+            name="sandbox.exec",
+            arguments={"command": ["python", "-c", "open('app.py', 'w')"]},
+        ),
+        context,
+        allowed_tools=("sandbox.exec",),
+    )
+
+    assert result.status == "FAILED"
+    assert result.output["exit_code"] == 2
+    assert result.output["stderr"] == "Permission denied"
+
