@@ -98,9 +98,15 @@ class ToolExecutor:
             raise RuntimeError(f"Tool '{definition.name}' has no execution handler")
 
         output = await definition.handler(context, call.arguments)
+        exit_code = output.get("exit_code")
+        failed_exit = (
+            isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+            and exit_code != 0
+        )
         return ToolExecutionResult(
             tool_name=definition.name,
-            status="COMPLETED",
+            status="FAILED" if failed_exit else "COMPLETED",
             output=output,
         )
 
@@ -198,7 +204,10 @@ def build_default_tool_registry(
             name="sandbox.exec",
             description=(
                 "Execute an explicit argv command inside an isolated Docker sandbox "
-                "with deny-by-default networking and resource limits."
+                "with deny-by-default networking and resource limits. The workspace is "
+                "mounted writable at /workspace and the working directory is /workspace; "
+                "use relative paths or /workspace/... and never use host-side absolute paths. "
+                "A non-zero exit code means the command failed."
             ),
             risk_level="R2",
             handler=sandbox_exec,
