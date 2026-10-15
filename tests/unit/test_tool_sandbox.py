@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pathlib import Path
 
 import pytest
@@ -129,7 +130,7 @@ def test_docker_sandbox_builds_hardened_command(tmp_path: Path) -> None:
     assert "--read-only" in command
     assert "--pids-limit" in command
     assert "--user" in command
-    assert command[command.index("--user") + 1] == f"{__import__('os').getuid()}:{__import__('os').getgid()}"
+    assert command[command.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
     assert command[-4:] == ["example:latest", "python", "-c", "print(1)"]
 
 
