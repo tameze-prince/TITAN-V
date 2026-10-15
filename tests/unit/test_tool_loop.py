@@ -191,3 +191,89 @@ async def test_tool_loop_rejects_text_that_mimics_a_tool_call(tmp_path: Path) ->
             tools=(registry.resolve("workspace.list"),),
             executor=ToolExecutor(registry),
         )
+
+
+class RepeatingToolProvider:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def generate_tool_turn(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt,
+        tools,
+        previous_response_id,
+    ) -> ModelToolTurn:
+        self.calls += 1
+        return ModelToolTurn(
+            response_id=f"response-{self.calls}",
+            text="",
+            tool_calls=(
+                ModelToolCall(
+                    call_id=f"call-{self.calls}",
+                    name="sandbox.exec",
+                    arguments={"command": ["bash", "-lc", "echo hello"]},
+                ),
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_reports_recent_results_when_model_never_finishes(
+    tmp_path: Path,
+) -> None:
+    async def failing_tool(
+        context: ToolExecutionContext, arguments: dict
+    ) -> dict:
+        raise RuntimeError("sandbox failed: bash executable not found")
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="sandbox.exec",
+            description="Execute a workspace command.",
+            risk_level="R2",
+            handler=failing_tool,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "command": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["command"],
+                "additionalProperties": False,
+            },
+        )
+    )
+    contract = AgentContract(
+        name="test-engineering-agent",
+        role="Engineering",
+        instructions="Run the command and report.",
+        capabilities=("analysis",),
+        allowed_tools=("sandbox.exec",),
+        risk_ceiling="R2",
+        model="local",
+    )
+    task = AgentTaskContext(
+        task_id="task-diagnostics",
+        run_id="run-diagnostics",
+        project_id="project-diagnostics",
+        title="Run a command",
+        objective="Run a command in the workspace.",
+        risk_level="R2",
+    )
+
+    with pytest.raises(RuntimeError, match="Recent tool results") as exc_info:
+        await AgentToolLoop(policy=ToolLoopPolicy(max_steps=1)).run(
+            provider=RepeatingToolProvider(),
+            contract=contract,
+            task=task,
+            workspace=tmp_path,
+            tools=(registry.resolve("sandbox.exec"),),
+            executor=ToolExecutor(registry),
+        )
+
+    message = str(exc_info.value)
+    assert "sandbox failed: bash executable not found" in message
+    assert '"status": "FAILED"' in message
+
