@@ -1,4 +1,5 @@
 import asyncio
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Mapping
@@ -79,6 +80,8 @@ class DockerSandbox:
             "docker",
             "run",
             "--rm",
+            "--user",
+            f"{os.getuid()}:{os.getgid()}",
             "--network",
             self.policy.network,
             "--memory",
